@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+
+FROM mcr.microsoft.com/powershell:7.4-ubuntu-22.04
+
+WORKDIR /app
+
+# Install PnP.PowerShell for SharePoint Online
+RUN pwsh -NoLogo -NoProfile -Command \
+    "Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; \
+     Install-Module PnP.PowerShell -Force -Scope AllUsers -AcceptLicense"
+
+COPY copy-sharepoint-to-local.ps1 /app/copy-sharepoint-to-local.ps1
+COPY entrypoint-sharepoint.ps1 /app/entrypoint.ps1
+
+# Default mount for downloaded files
+VOLUME ["/data"]
+
+ENV SITE_URL="" \
+    LIBRARY_NAME="" \
+    SERVER_RELATIVE_URL="" \
+    SOURCE_FOLDER="" \
+    LOCAL_PATH="/data" \
+    AUTH="DeviceLogin" \
+    MODIFIED_SINCE="" \
+    OVERWRITE="false" \
+    RECURSIVE="true"
+
+ENTRYPOINT ["pwsh", "-NoLogo", "-NoProfile", "/app/entrypoint.ps1"]
+

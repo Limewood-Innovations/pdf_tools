@@ -1,0 +1,125 @@
+# PDF Tools (Windows)
+
+Kleines Projekt zum Splitten eines gescannten PDF-Stapels in 2-Seiten-PDFs und optionalem Entfernen von Leerseiten.
+
+## Inhalt
+- `pdf_batch_tools.py` – Hauptskript (Python)
+- `run_split.bat` – Batch zum Start per Doppelklick
+- `watch-and-run.ps1` – PowerShell-Watcher, startet automatisch bei neuen PDFs
+- `setup_venv.ps1` – Einmalige Einrichtung (virtuelle Umgebung + Abhängigkeiten)
+- `requirements.txt` – Python-Abhängigkeiten (pypdf)
+- `copy-sharepoint-to-local.ps1` – Dateien aus SharePoint Online in ein lokales/UNC-Verzeichnis kopieren
+
+## Schnellstart (Windows Server / Desktop)
+
+1. **Projekt entpacken** nach `C:\pdf-tools` (oder anderen Pfad).
+2. **Python 3.12 installieren** (mit "Add to PATH").
+3. PowerShell als Benutzer/Admin öffnen und ausführen:
+   ```powershell
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+   C:\pdf-tools\setup_venv.ps1
+   ```
+4. Lege deine gescannte PDF in `C:\pdf-in`.
+5. Starte:
+   - per Doppelklick `C:\pdf-tools\run_split.bat` **oder**
+   - Watcher: `powershell -File C:\pdf-tools\watch-and-run.ps1`
+
+Ausgabe liegt in `C:\pdf-2pages` (gesplittet) und `C:\pdf-clean` (optional bereinigt).
+
+## Manuelle Nutzung
+```powershell
+# Aktivieren der venv
+C:\pdf-tools\.venv\Scripts\Activate.ps1
+
+# Splitten + Clean
+python C:\pdf-tools\pdf_batch_tools.py --in-dir C:\pdf-in --out-dir-split C:\pdf-2pages --out-dir-clean C:\pdf-clean
+
+# Nur splitten
+python C:\pdf-tools\pdf_batch_tools.py --in-dir C:\pdf-in --out-dir-split C:\pdf-2pages --no-clean
+```
+
+## Aufgabenplaner (Task Scheduler)
+- Aktion: `C:\pdf-tools\run_split.bat`
+- "Starten in": `C:\pdf-tools`
+- "Mit höchsten Privilegien ausführen" (optional)
+- Trigger: z. B. täglich 22:00 oder bei Systemstart.
+
+## Hinweise
+- Leerseiten-Erkennung ist heuristisch (Text oder Bilder → nicht leer).
+- Alle generierten PDFs werden vor dem Speichern von PDF-Tags bereinigt (Katalog: `/StructTreeRoot`, `/MarkInfo`, `/RoleMap`; Seiten: `/Tabs`, `/StructParents`).
+- Pfade in `.bat`/`.ps1` bei Bedarf anpassen.
+- Für Debugging: Ausgaben in Datei umleiten (z. B. `>> C:\pdf-tools\run.log 2>&1`).
+
+Lizenz: MIT
+
+## SharePoint → Lokaler Share
+
+Mit `copy-sharepoint-to-local.ps1` können Dateien aus einer SharePoint-Online-Dokumentbibliothek auf ein lokales oder UNC-Ziel kopiert werden.
+
+Voraussetzungen:
+- PowerShell 5.1 oder neuer
+- Modul PnP.PowerShell (einmalig installieren):
+  ```powershell
+  Install-Module PnP.PowerShell -Scope CurrentUser
+  ```
+
+Beispiele:
+```powershell
+# Interaktive Anmeldung, gesamte Bibliothek kopieren
+powershell -File copy-sharepoint-to-local.ps1 `
+  -SiteUrl https://tenant.sharepoint.com/sites/Team `
+  -LibraryName "Shared Documents" `
+  -LocalPath \\fileserver\share\TeamDocs `
+  -Recursive -Overwrite
+
+# Nur Unterordner kopieren (server-relative URL), nur neue/aktualisierte Dateien seit Datum
+powershell -File copy-sharepoint-to-local.ps1 `
+  -SiteUrl https://tenant.sharepoint.com/sites/Team `
+  -ServerRelativeUrl "/sites/Team/Shared Documents/Export" `
+  -LocalPath C:\exports `
+  -ModifiedSince "2025-01-01"
+```
+
+## Docker
+
+Zwei Container-Optionen stehen bereit:
+
+- Python-Tool (Split + Clean):
+  - Build (Kontext ist der Ordner mit Dockerfile/Script/requirements):
+    ```bash
+    docker build -t pdf-tools-python -f new-projects/pdf-tools/Dockerfile new-projects/pdf-tools
+    ```
+  - Run (Volumes für Ein-/Ausgabe mounten):
+    ```bash
+    docker run --rm \
+      -v /host/pdf-in:/in \
+      -v /host/pdf-2pages:/split \
+      -v /host/pdf-clean:/clean \
+      pdf-tools-python \
+      --in-dir /in --out-dir-split /split --out-dir-clean /clean --every 2
+    ```
+
+- SharePoint → Lokaler Share (PnP.PowerShell):
+  - Build:
+    ```bash
+    docker build -t pdf-tools-sharepoint -f new-projects/pdf-tools/Dockerfile.sharepoint new-projects/pdf-tools
+    ```
+  - Run (Zielordner nach `/data` mounten, Auth per DeviceLogin):
+    ```bash
+    docker run --rm -it \
+      -e SITE_URL="https://tenant.sharepoint.com/sites/Team" \
+      -e LIBRARY_NAME="Shared Documents" \
+      -e SOURCE_FOLDER="Export" \
+      -e AUTH=DeviceLogin \
+      -e OVERWRITE=true \
+      -v /host/exports:/data \
+      pdf-tools-sharepoint
+    ```
+  - Alternativ mit Server-Relative-URL:
+    ```bash
+    docker run --rm -it \
+      -e SITE_URL="https://tenant.sharepoint.com/sites/Team" \
+      -e SERVER_RELATIVE_URL="/sites/Team/Shared Documents/Export" \
+      -v /host/exports:/data \
+      pdf-tools-sharepoint
+    ```

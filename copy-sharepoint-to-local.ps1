@@ -33,16 +33,43 @@
   Only download files modified on/after this date (UTC/local accepted). Example: "2025-01-01".
 
 .PARAMETER Auth
-  Authentication mode: Interactive | DeviceLogin | Credentials (default: Interactive).
+  Authentication mode: Interactive | DeviceLogin | Credentials | AppSecret | Certificate (default: Interactive).
 
 .PARAMETER Credential
   PSCredential to use when -Auth Credentials is selected.
+
+.PARAMETER TenantId
+  Directory (tenant) ID for app-only authentication (AppSecret/Certificate).
+
+.PARAMETER ClientId
+  Application (client) ID for app-only authentication (AppSecret/Certificate).
+
+.PARAMETER ClientSecret
+  Client secret (string) for app-only authentication (AppSecret).
+
+.PARAMETER CertificatePath
+  Path to a PFX certificate file for app-only authentication (Certificate).
+
+.PARAMETER CertificatePassword
+  Password for the PFX certificate (string) for app-only authentication (Certificate).
 
 .EXAMPLE
   .\\copy-sharepoint-to-local.ps1 -SiteUrl https://tenant.sharepoint.com/sites/Team -LibraryName "Shared Documents" -SourceFolder Reports -LocalPath \\srv\\archive\\Reports -Recursive -Overwrite
 
 .EXAMPLE
   .\\copy-sharepoint-to-local.ps1 -SiteUrl https://tenant.sharepoint.com/sites/Team -ServerRelativeUrl "/sites/Team/Shared Documents/Export" -LocalPath C:\\exports -ModifiedSince "2025-01-01"
+
+.EXAMPLE
+  # App-only with client secret
+  .\\copy-sharepoint-to-local.ps1 -SiteUrl https://tenant.sharepoint.com/sites/Team `
+    -Auth AppSecret -TenantId <TENANT_ID> -ClientId <CLIENT_ID> -ClientSecret '<CLIENT_SECRET>' `
+    -ServerRelativeUrl "/sites/Team/Shared Documents/Export" -LocalPath C:\\exports
+
+.EXAMPLE
+  # App-only with certificate
+  .\\copy-sharepoint-to-local.ps1 -SiteUrl https://tenant.sharepoint.com/sites/Team `
+    -Auth Certificate -TenantId <TENANT_ID> -ClientId <CLIENT_ID> -CertificatePath .\\app.pfx -CertificatePassword 'PfxPassword' `
+    -LibraryName "Shared Documents" -SourceFolder Export -LocalPath C:\\exports
 
 .NOTES
   Requires: PnP.PowerShell
@@ -58,8 +85,14 @@ param(
   [Parameter(Mandatory=$false)] [switch]$Recursive = $true,
   [Parameter(Mandatory=$false)] [switch]$Overwrite,
   [Parameter(Mandatory=$false)] [datetime]$ModifiedSince,
-  [Parameter(Mandatory=$false)] [ValidateSet('Interactive','DeviceLogin','Credentials')] [string]$Auth = 'Interactive',
-  [Parameter(Mandatory=$false)] [System.Management.Automation.PSCredential]$Credential
+  [Parameter(Mandatory=$false)] [ValidateSet('Interactive','DeviceLogin','Credentials','AppSecret','Certificate')] [string]$Auth = 'Interactive',
+  [Parameter(Mandatory=$false)] [System.Management.Automation.PSCredential]$Credential,
+  # App-only auth parameters
+  [Parameter(Mandatory=$false)] [string]$TenantId,
+  [Parameter(Mandatory=$false)] [string]$ClientId,
+  [Parameter(Mandatory=$false)] [string]$ClientSecret,
+  [Parameter(Mandatory=$false)] [string]$CertificatePath,
+  [Parameter(Mandatory=$false)] [string]$CertificatePassword
 )
 
 function Ensure-Module {
@@ -193,6 +226,24 @@ try {
       if (-not $Credential) { $Credential = Get-Credential -Message "Enter SharePoint credentials" }
       Connect-PnPOnline -Url $SiteUrl -Credentials $Credential -ErrorAction Stop
     }
+    'AppSecret' {
+      if (-not $TenantId -or -not $ClientId -or -not $ClientSecret) {
+        throw "Auth=AppSecret requires -TenantId, -ClientId and -ClientSecret"
+      }
+      $sec = ConvertTo-SecureString -AsPlainText $ClientSecret -Force
+      Connect-PnPOnline -Url $SiteUrl -Tenant $TenantId -ClientId $ClientId -ClientSecret $sec -ErrorAction Stop
+    }
+    'Certificate' {
+      if (-not $TenantId -or -not $ClientId -or -not $CertificatePath) {
+        throw "Auth=Certificate requires -TenantId, -ClientId and -CertificatePath"
+      }
+      if ($CertificatePassword) {
+        $pfx = ConvertTo-SecureString -AsPlainText $CertificatePassword -Force
+        Connect-PnPOnline -Url $SiteUrl -Tenant $TenantId -ClientId $ClientId -CertificatePath $CertificatePath -CertificatePassword $pfx -ErrorAction Stop
+      } else {
+        Connect-PnPOnline -Url $SiteUrl -Tenant $TenantId -ClientId $ClientId -CertificatePath $CertificatePath -ErrorAction Stop
+      }
+    }
   }
 
   Ensure-Directory -Path $LocalPath
@@ -208,4 +259,3 @@ catch {
   Write-Error $_
   exit 1
 }
-

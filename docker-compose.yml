@@ -1,0 +1,26 @@
+version: "3.9"
+
+name: pdf-tools
+
+services:
+  pdf-tools:
+    build: .
+    container_name: pdf-tools
+    restart: "no"
+    volumes:
+      - ./01_input:/01_input
+      - ./02_processed:/02_processed
+      - ./03_cleaned:/03_cleaned
+      - ./99_archived:/99_archived
+
+    command: [
+      "--in-dir", "/01_input",
+      "--out-dir-split", "/02_processed",
+      "--out-dir-clean", "/03_cleaned",
+      "--every", "2",
+      # "--archive-dir", "/99_archived",
+      "--min-alnum", "1500",
+      "--min-alnum-ratio", "0.8",
+      "--min-bytes", "4000",
+      "--no-image-nonblank"
+    ]

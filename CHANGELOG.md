@@ -16,6 +16,7 @@ All notable changes to this project are documented here.
 - Containerization:
   - `Dockerfile` to build a minimal image running the PDF split/clean tool with `pypdf`.
   - `Dockerfile.sharepoint` and `entrypoint-sharepoint.ps1` to run the SharePoint copy utility in a container via environment variables (mount target to `/data`).
+  - `docker-compose.yml` to run the PDF split/clean container with project folders mounted (01_input → 02_processed/03_cleaned) and default arguments.
 - Dependencies:
   - `requirements.txt` with `pypdf>=4.2.0`.
 - Documentation:

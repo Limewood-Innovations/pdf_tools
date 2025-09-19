@@ -20,10 +20,11 @@ ENV SITE_URL="" \
     SERVER_RELATIVE_URL="" \
     SOURCE_FOLDER="" \
     LOCAL_PATH="/data" \
-    AUTH="DeviceLogin" \
+    AUTH="Credentials" \
     MODIFIED_SINCE="" \
     OVERWRITE="false" \
-    RECURSIVE="true"
+    RECURSIVE="true" \
+    SP_USERNAME="" \
+    SP_PASSWORD=""
 
 ENTRYPOINT ["pwsh", "-NoLogo", "-NoProfile", "/app/entrypoint.ps1"]
-

@@ -37,8 +37,8 @@ Ausgabe liegt in `02_processed` (gesplittet) und `03_cleand` (optional bereinigt
 # Aktivieren der venv
 .\.venv\Scripts\Activate.ps1
 
-# Splitten + Clean (im Projektordner)
-python .\pdf_batch_tools.py --in-dir .\01_input --out-dir-split .\02_processed --out-dir-clean .\03_cleand
+# Splitten + Clean (im Projektordner) + Originale archivieren
+python .\pdf_batch_tools.py --in-dir .\01_input --out-dir-split .\02_processed --out-dir-clean .\03_cleand --archive-dir .\99_archived
 
 # Nur splitten
 python .\pdf_batch_tools.py --in-dir .\01_input --out-dir-split .\02_processed --no-clean
@@ -95,14 +95,15 @@ Zwei Container-Optionen stehen bereit:
     ```bash
     docker build -t pdf-tools-python -f new-projects/pdf-tools/Dockerfile new-projects/pdf-tools
     ```
-  - Run (Volumes für Ein-/Ausgabe mounten; nutzt Projektstruktur):
+  - Run (Volumes für Ein-/Ausgabe/Archiv mounten; nutzt Projektstruktur):
     ```bash
     docker run --rm \
-      -v /host/work/01_input:/in \
-      -v /host/work/02_processed:/split \
-      -v /host/work/03_cleand:/clean \
+      -v /host/work/01_input:/01_input \
+      -v /host/work/02_processed:/02_processed \
+      -v /host/work/03_cleand:/03_cleaned \
+      -v /host/work/99_archived:/99_archived \
       pdf-tools-python \
-      --in-dir /in --out-dir-split /split --out-dir-clean /clean --every 2
+      --in-dir /01_input --out-dir-split /02_processed --out-dir-clean /03_cleaned --archive-dir /99_archived --every 2
     ```
 
 - SharePoint → Lokaler Share (PnP.PowerShell):

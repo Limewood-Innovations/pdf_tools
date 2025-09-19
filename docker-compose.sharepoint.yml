@@ -1,0 +1,28 @@
+version: "3.9"
+
+name: pdf-tools-sharepoint
+
+services:
+  sp-copy:
+    build:
+      context: .
+      dockerfile: Dockerfile.sharepoint
+    container_name: pdf-tools-sharepoint
+    restart: "no"
+    environment:
+      SITE_URL: ${SITE_URL}
+      # One of: LIBRARY_NAME/SOURCE_FOLDER or SERVER_RELATIVE_URL
+      LIBRARY_NAME: ${LIBRARY_NAME}
+      SOURCE_FOLDER: ${SOURCE_FOLDER}
+      SERVER_RELATIVE_URL: ${SERVER_RELATIVE_URL}
+      LOCAL_PATH: /data
+      AUTH: Credentials
+      SP_USERNAME: ${SP_USERNAME}
+      SP_PASSWORD: ${SP_PASSWORD}
+      # Optional filters
+      MODIFIED_SINCE: ${MODIFIED_SINCE}
+      OVERWRITE: ${OVERWRITE:-true}
+      RECURSIVE: ${RECURSIVE:-true}
+    volumes:
+      - ./data:/data
+

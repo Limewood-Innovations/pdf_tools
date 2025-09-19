@@ -9,33 +9,39 @@ Kleines Projekt zum Splitten eines gescannten PDF-Stapels in 2-Seiten-PDFs und o
 - `setup_venv.ps1` – Einmalige Einrichtung (virtuelle Umgebung + Abhängigkeiten)
 - `requirements.txt` – Python-Abhängigkeiten (pypdf)
 - `copy-sharepoint-to-local.ps1` – Dateien aus SharePoint Online in ein lokales/UNC-Verzeichnis kopieren
+  
+Standardordner (im Projektverzeichnis):
+- `01_input` – Eingang (zu verarbeitende PDFs)
+- `02_processed` – gesplittete Ausgaben
+- `03_cleand` – bereinigte Ausgaben (ohne Leerseiten)
+- `99_archived` – optionales Archiv (manuell/extern nutzbar)
 
 ## Schnellstart (Windows Server / Desktop)
 
-1. **Projekt entpacken** nach `C:\pdf-tools` (oder anderen Pfad).
-2. **Python 3.12 installieren** (mit "Add to PATH").
-3. PowerShell als Benutzer/Admin öffnen und ausführen:
+1. Projekt an beliebigen Ort entpacken/klonen.
+2. Python 3.12 installieren (mit "Add to PATH").
+3. PowerShell im Projektordner öffnen und ausführen:
    ```powershell
    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-   C:\pdf-tools\setup_venv.ps1
+   .\setup_venv.ps1
    ```
-4. Lege deine gescannte PDF in `C:\pdf-in`.
+4. Lege deine gescannte PDF in `01_input`.
 5. Starte:
-   - per Doppelklick `C:\pdf-tools\run_split.bat` **oder**
-   - Watcher: `powershell -File C:\pdf-tools\watch-and-run.ps1`
+   - per Doppelklick `run_split.bat` (arbeitet auf 01_input → 02_processed/03_cleand) **oder**
+   - Watcher: `powershell -File .\watch-and-run.ps1`
 
-Ausgabe liegt in `C:\pdf-2pages` (gesplittet) und `C:\pdf-clean` (optional bereinigt).
+Ausgabe liegt in `02_processed` (gesplittet) und `03_cleand` (optional bereinigt).
 
 ## Manuelle Nutzung
 ```powershell
 # Aktivieren der venv
-C:\pdf-tools\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 
-# Splitten + Clean
-python C:\pdf-tools\pdf_batch_tools.py --in-dir C:\pdf-in --out-dir-split C:\pdf-2pages --out-dir-clean C:\pdf-clean
+# Splitten + Clean (im Projektordner)
+python .\pdf_batch_tools.py --in-dir .\01_input --out-dir-split .\02_processed --out-dir-clean .\03_cleand
 
 # Nur splitten
-python C:\pdf-tools\pdf_batch_tools.py --in-dir C:\pdf-in --out-dir-split C:\pdf-2pages --no-clean
+python .\pdf_batch_tools.py --in-dir .\01_input --out-dir-split .\02_processed --no-clean
 ```
 
 ## Aufgabenplaner (Task Scheduler)
@@ -89,12 +95,12 @@ Zwei Container-Optionen stehen bereit:
     ```bash
     docker build -t pdf-tools-python -f new-projects/pdf-tools/Dockerfile new-projects/pdf-tools
     ```
-  - Run (Volumes für Ein-/Ausgabe mounten):
+  - Run (Volumes für Ein-/Ausgabe mounten; nutzt Projektstruktur):
     ```bash
     docker run --rm \
-      -v /host/pdf-in:/in \
-      -v /host/pdf-2pages:/split \
-      -v /host/pdf-clean:/clean \
+      -v /host/work/01_input:/in \
+      -v /host/work/02_processed:/split \
+      -v /host/work/03_cleand:/clean \
       pdf-tools-python \
       --in-dir /in --out-dir-split /split --out-dir-clean /clean --every 2
     ```

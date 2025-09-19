@@ -25,3 +25,4 @@ All notable changes to this project are documented here.
 
 ### Changed
 - PDF outputs are now untagged by default: `pdf_batch_tools.py` strips PDF tagging metadata before writing files. Removes catalog keys (`/StructTreeRoot`, `/MarkInfo`, `/RoleMap`) and page-level keys (`/Tabs`, `/StructParents`).
+ - Default folder layout updated to project-relative names: `01_input`, `02_processed`, `03_cleand`, `99_archived`. Scripts (`run_split.bat`, `watch-and-run.ps1`, `setup_venv.ps1`) now resolve paths relative to the script directory.

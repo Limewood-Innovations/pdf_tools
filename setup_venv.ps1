@@ -1,6 +1,6 @@
 # Einmalige Einrichtung auf Windows
 param(
-  [string]$Base = "C:\pdf-tools"
+  [string]$Base = $PSScriptRoot
 )
 
 if (!(Test-Path $Base)) { New-Item -ItemType Directory -Force -Path $Base | Out-Null }
@@ -18,10 +18,11 @@ python -m venv .venv
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 
-# Standardordner
-New-Item -ItemType Directory -Force -Path C:\pdf-in | Out-Null
-New-Item -ItemType Directory -Force -Path C:\pdf-2pages | Out-Null
-New-Item -ItemType Directory -Force -Path C:\pdf-clean | Out-Null
+# Standardordner im Projekt
+New-Item -ItemType Directory -Force -Path (Join-Path $Base '01_input') | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $Base '02_processed') | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $Base '03_cleand') | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $Base '99_archived') | Out-Null
 
 Write-Host "Setup fertig. Skript-Test:"
-python .\pdf_batch_tools.py --in-dir C:\pdf-in --out-dir-split C:\pdf-2pages --out-dir-clean C:\pdf-clean
+python .\pdf_batch_tools.py --in-dir (Join-Path $Base '01_input') --out-dir-split (Join-Path $Base '02_processed') --out-dir-clean (Join-Path $Base '03_cleand')

@@ -14,5 +14,6 @@ RUN pip install --upgrade pip \
 
 COPY pdf_batch_tools.py ./
 
-ENTRYPOINT ["python", "/app/pdf_batch_tools.py"]
+VOLUME ["/01_input", "/02_processed", "/03_cleaned", "/99_archived"]
 
+ENTRYPOINT ["python", "/app/pdf_batch_tools.py"]

@@ -42,6 +42,9 @@ python .\pdf_batch_tools.py --in-dir .\01_input --out-dir-split .\02_processed -
 
 # Nur splitten
 python .\pdf_batch_tools.py --in-dir .\01_input --out-dir-split .\02_processed --no-clean
+
+# Gut funktionierender split Befehl für gescannte Dokumente
+python  pdf_batch_tools.py --in-dir ./01_input --out-dir-split ./02_processed --out-dir-clean ./03_cleaned --debug-pages --min-alnum-ratio 0.2 --no-image-nonblank --min-bytes 6000 --log-file ./logs/pdf.log
 ```
 
 ## Aufgabenplaner (Task Scheduler)
@@ -100,10 +103,20 @@ Zwei Container-Optionen stehen bereit:
     docker run --rm \
       -v /host/work/01_input:/01_input \
       -v /host/work/02_processed:/02_processed \
-      -v /host/work/03_cleand:/03_cleaned \
+      -v /host/work/03_cleaned:/03_cleaned \
       -v /host/work/99_archived:/99_archived \
       pdf-tools-python \
-      --in-dir /01_input --out-dir-split /02_processed --out-dir-clean /03_cleaned --archive-dir /99_archived --every 2
+      --in-dir /01_input \
+      --out-dir-split /02_processed \
+      --out-dir-clean /03_cleaned \
+      --archive-dir /99_archived \
+      --every 2 \
+      --min-alnum-ratio 0.2 \
+      --no-image-nonblank \
+      --min-bytes 6000 \
+      --debug-pages \
+      --log-file ./logs/pdf.log
+
     ```
 
 - SharePoint → Lokaler Share (PnP.PowerShell):

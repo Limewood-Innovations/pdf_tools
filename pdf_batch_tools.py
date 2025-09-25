@@ -347,7 +347,8 @@ def process(
         [p for p in in_dir.iterdir() if p.is_file() and p.suffix.lower() == ".pdf"]
     )
     if not pdfs:
-        raise FileNotFoundError(f"Keine PDF in {in_dir} gefunden.")
+        logger.warning("Keine PDF in %s gefunden.", in_dir)
+        return
 
     total_parts = 0
     total_cleaned = 0

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import argparse
+import logging
 import re
+import sys
 from pathlib import Path
 import shutil
 from typing import Iterable, Optional
-import traceback
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DictionaryObject, NameObject
@@ -14,10 +15,21 @@ except Exception:  # compatibility if symbol not exported
     IndirectObject = None  # type: ignore
 
 ALNUM_RE = re.compile(r"[0-9A-Za-zÄÖÜäöüß]")
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 COLOR_RED = "\033[31m"
 COLOR_GREEN = "\033[32m"
 COLOR_RESET = "\033[0m"
+
+
+logger = logging.getLogger("pdf_batch_tools")
+logger.addHandler(logging.NullHandler())
+
+
+class StripColorFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        message = super().format(record)
+        return ANSI_ESCAPE_RE.sub("", message)
 
 
 def _color_label(label: str) -> str:
@@ -26,6 +38,24 @@ def _color_label(label: str) -> str:
     if label == "NON-BLANK":
         return f"{COLOR_GREEN}{label}{COLOR_RESET}"
     return label
+
+
+def configure_logging(log_file: Optional[Path]) -> None:
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
+    logger.propagate = False
+
+    console_handler = logging.StreamHandler(stream=sys.stdout)
+    console_handler.setLevel(logging.DEBUG)
+    console_handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(console_handler)
+
+    if log_file is not None:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(StripColorFormatter("%(asctime)s %(levelname)s %(message)s"))
+        logger.addHandler(file_handler)
 
 def split_every_n_pages(src_pdf: Path, out_dir: Path, n: int = 2) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -164,15 +194,18 @@ def is_blank_page(
     alnum_ratio = (alnum_count / non_ws_chars) if non_ws_chars else 0.0
     stream_bytes = content_stream_bytes(page)
     if debug_pages:
-        print(
-            f"[DEBUG] text_len={len(txt.strip())} alnum={alnum_count} "
-            f"alnum_ratio={alnum_ratio:.3f} stream_bytes={stream_bytes}"
+        logger.debug(
+            "text_len=%s alnum=%s alnum_ratio=%.3f stream_bytes=%s",
+            len(txt.strip()),
+            alnum_count,
+            alnum_ratio,
+            stream_bytes,
         )
         if len(txt.strip()) <= 120 and txt.strip():
-            print(f"[DEBUG] text_preview={txt.strip()!r}")
+            logger.debug("text_preview=%r", txt.strip())
     if alnum_count >= min_alnum_chars and alnum_ratio >= min_alnum_ratio:
         if debug_pages:
-            print(f"[DEBUG] {_color_label('NON-BLANK')} reason=alnum_threshold")
+            logger.debug("%s reason=alnum_threshold", _color_label("NON-BLANK"))
         return False
 
     if len(txt.strip()) >= text_len_threshold and alnum_count == 0:
@@ -180,9 +213,10 @@ def is_blank_page(
 
     if stream_bytes > min_stream_bytes:
         if debug_pages:
-            print(
-                f"[DEBUG] {_color_label('NON-BLANK')} "
-                f"reason=stream_bytes>{min_stream_bytes}"
+            logger.debug(
+                "%s reason=stream_bytes>%s",
+                _color_label("NON-BLANK"),
+                min_stream_bytes,
             )
         return False
 
@@ -190,11 +224,11 @@ def is_blank_page(
     resources = _get_inherited(page, "/Resources")
     if treat_any_image_as_nonblank and page_has_images(resources):
         if debug_pages:
-            print(f"[DEBUG] {_color_label('NON-BLANK')} reason=image_found")
+            logger.debug("%s reason=image_found", _color_label("NON-BLANK"))
         return False
 
     if debug_pages:
-        print(f"[DEBUG] {_color_label('BLANK')} reason=below_thresholds")
+        logger.debug("%s reason=below_thresholds", _color_label("BLANK"))
     return True
 
 def remove_blank_pages(
@@ -230,7 +264,10 @@ def remove_blank_pages(
     # Fallback: if everything looked blank (kept == 0), keep original file
     if kept == 0:
         if debug_pages:
-            print("[DEBUG] All pages classified blank for part; fallback_on_all_blank=", fallback_on_all_blank)
+            logger.debug(
+                "All pages classified blank for part; fallback_on_all_blank=%s",
+                fallback_on_all_blank,
+            )
         dst_pdf.parent.mkdir(parents=True, exist_ok=True)
         if fallback_on_all_blank:
             try:
@@ -317,20 +354,29 @@ def process(
     total_removed_pages = 0
 
     for idx, src in enumerate(pdfs, start=1):
-        print(f"[{idx}/{len(pdfs)}] Splitte {src.name} alle {n} Seiten → {out_dir_split}")
+        logger.info(
+            "[%s/%s] Splitte %s alle %s Seiten → %s",
+            idx,
+            len(pdfs),
+            src.name,
+            n,
+            out_dir_split,
+        )
         try:
             parts = split_every_n_pages(src, out_dir_split, n=n)
             total_parts += len(parts)
-            print("#" * 60)
-            print(f"Erzeugt: {len(parts)} Teil-PDFs aus {src.name}")
+            logger.info("#" * 60)
+            logger.info("Erzeugt: %s Teil-PDFs aus %s", len(parts), src.name)
 
             if clean and out_dir_clean is not None:
-                print(
-                    "Entferne Leerseiten →",
+                logger.info(
+                    "Entferne Leerseiten → %s (min_alnum=%s, min_alnum_ratio=%s, min_stream_bytes=%s)",
                     out_dir_clean,
-                    f"(min_alnum={min_alnum_chars}, min_alnum_ratio={min_alnum_ratio}, min_stream_bytes={min_stream_bytes})"
+                    min_alnum_chars,
+                    min_alnum_ratio,
+                    min_stream_bytes,
                 )
-                print("-" * 60)
+                logger.info("-" * 60)
                 for p in parts:
                     dst = (out_dir_clean / p.name)
                     try:
@@ -343,9 +389,8 @@ def process(
                             debug_pages=debug_pages,
                             fallback_on_all_blank=fallback_on_all_blank,
                         )
-                    except Exception as e:
-                        print(f"Fehler bei Leerseiten-Entfernung für {p.name}: {e}")
-                        traceback.print_exc()
+                    except Exception:
+                        logger.exception("Fehler bei Leerseiten-Entfernung für %s", p.name)
                         # Fallback: Original kopieren
                         dst.parent.mkdir(parents=True, exist_ok=True)
                         try:
@@ -356,19 +401,22 @@ def process(
                             continue
                     total_removed_pages += removed
                     total_cleaned += 1
-                    print("-" * 60)
-        except Exception as e:
-            print(f"Fehler beim Verarbeiten von {src.name}: {e}")
-            traceback.print_exc()
+                    logger.info("-" * 60)
+        except Exception:
+            logger.exception("Fehler beim Verarbeiten von %s", src.name)
         finally:
             # Move original to archive after processing attempt
             if archive_dir is not None and src.exists():
                 moved_to = move_to_archive(src, archive_dir)
-                print(f"Archiviert: {src.name} → {moved_to}")
+                logger.info("Archiviert: %s → %s", src.name, moved_to)
 
-    print(f"Gesamt erzeugte Teil-PDFs: {total_parts}")
+    logger.info("Gesamt erzeugte Teil-PDFs: %s", total_parts)
     if clean and out_dir_clean is not None:
-        print(f"Gesamt bereinigte PDFs: {total_cleaned}, entfernte Leerseiten gesamt: {total_removed_pages}")
+        logger.info(
+            "Gesamt bereinigte PDFs: %s, entfernte Leerseiten gesamt: %s",
+            total_cleaned,
+            total_removed_pages,
+        )
 
 def move_to_archive(src: Path, archive_dir: Path) -> Path:
     archive_dir.mkdir(parents=True, exist_ok=True)
@@ -394,6 +442,7 @@ def main():
     ap.add_argument("--every", type=int, default=2, help="Alle N Seiten splitten (Standard: 2)")
     ap.add_argument("--no-clean", action="store_true", help="keine Leerseiten-Entfernung durchführen")
     ap.add_argument("--archive-dir", help="Optional: verarbeiteten Original-PDF nach Abschluss hierhin verschieben (Archiv)")
+    ap.add_argument("--log-file", help="Optional: Pfad zu einer Logdatei")
 
     ap.add_argument("--min-alnum", type=int, default=5, help="Mindestanzahl an alphanumerischen Zeichen, damit Seite als 'nicht leer' gilt (Standard: 5)")
     ap.add_argument("--min-alnum-ratio", type=float, default=0.2, help="Mindestanteil alphanumerischer Zeichen (ohne Leerraum), damit Seite als 'nicht leer' gilt (Standard: 0.2)")
@@ -411,7 +460,10 @@ def main():
     out_dir_split = Path(args.out_dir_split)
     out_dir_clean = Path(args.out_dir_clean) if args.out_dir_clean else None
     archive_dir = Path(args.archive_dir) if args.archive_dir else None
+    log_file = Path(args.log_file).expanduser() if args.log_file else None
     clean = not args.no_clean and (out_dir_clean is not None)
+
+    configure_logging(log_file)
 
     process(
         in_dir, out_dir_split, out_dir_clean,

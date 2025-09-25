@@ -15,6 +15,18 @@ except Exception:  # compatibility if symbol not exported
 
 ALNUM_RE = re.compile(r"[0-9A-Za-zÄÖÜäöüß]")
 
+COLOR_RED = "\033[31m"
+COLOR_GREEN = "\033[32m"
+COLOR_RESET = "\033[0m"
+
+
+def _color_label(label: str) -> str:
+    if label == "BLANK":
+        return f"{COLOR_RED}{label}{COLOR_RESET}"
+    if label == "NON-BLANK":
+        return f"{COLOR_GREEN}{label}{COLOR_RESET}"
+    return label
+
 def split_every_n_pages(src_pdf: Path, out_dir: Path, n: int = 2) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     reader = PdfReader(str(src_pdf))
@@ -160,7 +172,7 @@ def is_blank_page(
             print(f"[DEBUG] text_preview={txt.strip()!r}")
     if alnum_count >= min_alnum_chars and alnum_ratio >= min_alnum_ratio:
         if debug_pages:
-            print("[DEBUG] NON-BLANK reason=alnum_threshold")
+            print(f"[DEBUG] {_color_label('NON-BLANK')} reason=alnum_threshold")
         return False
 
     if len(txt.strip()) >= text_len_threshold and alnum_count == 0:
@@ -168,18 +180,21 @@ def is_blank_page(
 
     if stream_bytes > min_stream_bytes:
         if debug_pages:
-            print(f"[DEBUG] NON-BLANK reason=stream_bytes>{min_stream_bytes}")
+            print(
+                f"[DEBUG] {_color_label('NON-BLANK')} "
+                f"reason=stream_bytes>{min_stream_bytes}"
+            )
         return False
 
     # Resolve resources with inheritance from Parent nodes (only if needed)
     resources = _get_inherited(page, "/Resources")
     if treat_any_image_as_nonblank and page_has_images(resources):
         if debug_pages:
-            print("[DEBUG] NON-BLANK reason=image_found")
+            print(f"[DEBUG] {_color_label('NON-BLANK')} reason=image_found")
         return False
 
     if debug_pages:
-        print("[DEBUG] BLANK reason=below_thresholds")
+        print(f"[DEBUG] {_color_label('BLANK')} reason=below_thresholds")
     return True
 
 def remove_blank_pages(
@@ -306,6 +321,7 @@ def process(
         try:
             parts = split_every_n_pages(src, out_dir_split, n=n)
             total_parts += len(parts)
+            print("#" * 60)
             print(f"Erzeugt: {len(parts)} Teil-PDFs aus {src.name}")
 
             if clean and out_dir_clean is not None:
@@ -314,6 +330,7 @@ def process(
                     out_dir_clean,
                     f"(min_alnum={min_alnum_chars}, min_alnum_ratio={min_alnum_ratio}, min_stream_bytes={min_stream_bytes})"
                 )
+                print("-" * 60)
                 for p in parts:
                     dst = (out_dir_clean / p.name)
                     try:
@@ -339,6 +356,7 @@ def process(
                             continue
                     total_removed_pages += removed
                     total_cleaned += 1
+                    print("-" * 60)
         except Exception as e:
             print(f"Fehler beim Verarbeiten von {src.name}: {e}")
             traceback.print_exc()

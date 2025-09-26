@@ -223,7 +223,7 @@ function Download-File {
         $fertigSiteRelative = Get-SiteRelativePath -ServerRelativeUrl $fertigFolderServer -SiteServerRelative $SiteServerRelative
         Resolve-PnPFolder -SiteRelativePath $fertigSiteRelative | Out-Null
         $targetUrl = Join-Url -a $fertigFolderServer -b $TargetFileName
-        Move-PnPFile -ServerRelativeUrl $ServerRelativeUrl -TargetUrl $targetUrl -Overwrite -AllowSchemaMismatch -ErrorAction Stop
+        Move-PnPFile -ServerRelativeUrl $ServerRelativeUrl -TargetUrl $targetUrl -Overwrite -AllowSchemaMismatch -Force -ErrorAction Stop
         Write-Host "Moved to Fertig: $ServerRelativeUrl -> $targetUrl" -ForegroundColor DarkCyan
       } catch {
         Write-Warning "Downloaded but failed to move to Fertig: $ServerRelativeUrl ($_ )"

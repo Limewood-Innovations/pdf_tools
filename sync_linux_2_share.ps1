@@ -4,10 +4,10 @@ param(
   [string]$LinuxUser = "youruser",
 
   # Use either SSH key OR password (prefer key)
-  [string]$SshKeyPath = "C:\Keys\id_ed25519.ppk",    # or OpenSSH key path
-  [string]$Password = "",                             # leave empty if using key
+  [string]$SshKeyPath = "C:\Keys\id_ed25519.ppk",
+  [string]$Password = "",
 
-  # Get this once and paste it here (ed25519 recommended)
+  # Get this once and paste it here (example format)
   [string]$SshHostKeyFingerprint = "ssh-ed25519 256 xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx:xx",
 
   # Remote source and archive
@@ -74,7 +74,7 @@ try {
     }
     $remoteMask = [WinSCP.RemotePath]::Combine($RemoteFolder, $mask)
 
-    # Download but DO NOT delete; we’ll move to archive only after success
+    # Download but DO NOT delete; archive only after success
     $result = $session.GetFiles($remoteMask, (Join-Path $WindowsShare "*"), $false, $transferOptions)
 
     $hadFailures = $false
@@ -90,7 +90,7 @@ try {
           [WinSCP.RemotePath]::EscapeFileMask($fileNameOnly)
         )
 
-        # If a same-named file already exists in archive, add a timestamp
+        # If same name exists in archive, append timestamp
         if ($session.FileExists($archiveTarget)) {
           $ts = (Get-Date).ToString("yyyyMMdd-HHmmss")
           $newName = "{0}.{1}{2}" -f $destBase, $ts, $destExt
@@ -103,7 +103,7 @@ try {
         $session.MoveFile($t.FileName, $archiveTarget) | Out-Null
         Write-Host "Transferred and archived: $fileNameOnly"
       } else {
-        Write-Error "FAILED to transfer: $($t.FileName) — $($t.Error.Message)"
+        Write-Error ("FAILED to transfer: {0} — {1}" -f $t.FileName, $t.Error.Message)
         $hadFailures = $true
       }
     }

@@ -58,6 +58,8 @@ def configure_logging(log_file: Optional[Path]) -> None:
         logger.addHandler(file_handler)
 
 def split_every_n_pages(src_pdf: Path, out_dir: Path, n: int = 2) -> list[Path]:
+    if n <= 0:
+        raise ValueError("split_every_n_pages requires n > 0")
     out_dir.mkdir(parents=True, exist_ok=True)
     reader = PdfReader(str(src_pdf))
     total = len(reader.pages)
@@ -355,19 +357,39 @@ def process(
     total_removed_pages = 0
 
     for idx, src in enumerate(pdfs, start=1):
-        logger.info(
-            "[%s/%s] Splitte %s alle %s Seiten → %s",
-            idx,
-            len(pdfs),
-            src.name,
-            n,
-            out_dir_split,
-        )
+        if n > 0:
+            logger.info(
+                "[%s/%s] Splitte %s alle %s Seiten → %s",
+                idx,
+                len(pdfs),
+                src.name,
+                n,
+                out_dir_split,
+            )
+        else:
+            logger.info(
+                "[%s/%s] Kein Split (Parameter --every=%s) → kopiere %s nach %s",
+                idx,
+                len(pdfs),
+                n,
+                src.name,
+                out_dir_split,
+            )
         try:
-            parts = split_every_n_pages(src, out_dir_split, n=n)
+            if n > 0:
+                parts = split_every_n_pages(src, out_dir_split, n=n)
+            else:
+                out_dir_split.mkdir(parents=True, exist_ok=True)
+                target = out_dir_split / src.name
+                shutil.copy2(src, target)
+                parts = [target]
+
             total_parts += len(parts)
             logger.info("#" * 60)
-            logger.info("Erzeugt: %s Teil-PDFs aus %s", len(parts), src.name)
+            if n > 0:
+                logger.info("Erzeugt: %s Teil-PDFs aus %s", len(parts), src.name)
+            else:
+                logger.info("Kopiert ohne Split: %s", parts[0].name)
 
             if clean and out_dir_clean is not None:
                 logger.info(
@@ -440,7 +462,12 @@ def main():
     ap.add_argument("--in-dir", required=True, help="Verzeichnis 1 (Quelle) mit der Eingangspdf")
     ap.add_argument("--out-dir-split", required=True, help="Verzeichnis 2 (Ausgabe der Teil-PDFs)")
     ap.add_argument("--out-dir-clean", help="Verzeichnis 3 (optional: bereinigte PDFs ohne Leerseiten)")
-    ap.add_argument("--every", type=int, default=2, help="Alle N Seiten splitten (Standard: 2)")
+    ap.add_argument(
+        "--every",
+        type=int,
+        default=0,
+        help="Alle N Seiten splitten (nur bei N>0 aktiv, N<=0 deaktiviert Split; Standard: 0)",
+    )
     ap.add_argument("--no-clean", action="store_true", help="keine Leerseiten-Entfernung durchführen")
     ap.add_argument("--archive-dir", help="Optional: verarbeiteten Original-PDF nach Abschluss hierhin verschieben (Archiv)")
     ap.add_argument("--log-file", help="Optional: Pfad zu einer Logdatei")

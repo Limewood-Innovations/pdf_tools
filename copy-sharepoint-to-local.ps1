@@ -221,7 +221,7 @@ function Download-File {
       $fertigFolderServer = Join-Url -a $ParentFolderServerRelative -b 'Fertig'
       try {
         $fertigSiteRelative = Get-SiteRelativePath -ServerRelativeUrl $fertigFolderServer -SiteServerRelative $SiteServerRelative
-        Ensure-PnPFolder -SiteRelativePath $fertigSiteRelative | Out-Null
+        Resolve-PnPFolder -SiteRelativePath $fertigSiteRelative | Out-Null
         $targetUrl = Join-Url -a $fertigFolderServer -b $TargetFileName
         Move-PnPFile -ServerRelativeUrl $ServerRelativeUrl -TargetUrl $targetUrl -Overwrite -AllowSchemaMismatch -ErrorAction Stop
         Write-Host "Moved to Fertig: $ServerRelativeUrl -> $targetUrl" -ForegroundColor DarkCyan

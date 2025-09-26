@@ -90,7 +90,7 @@ param(
   [Parameter(Mandatory=$false)] [string]$ServerRelativeUrl,
   [Parameter(Mandatory=$false)] [string]$SourceFolder = "",
   [Parameter(Mandatory=$true)]  [string]$LocalPath,
-  [Parameter(Mandatory=$false)] [switch]$Recursive = $true,
+  [Parameter(Mandatory=$false)] [switch]$Recursive = $false,
   [Parameter(Mandatory=$false)] [switch]$Overwrite,
   [Parameter(Mandatory=$false)] [datetime]$ModifiedSince,
   [Parameter(Mandatory=$false)] [string[]]$FileExtensions = @('pdf'),

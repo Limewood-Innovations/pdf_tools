@@ -53,6 +53,10 @@
 .PARAMETER CertificatePassword
   Password for the PFX certificate (string) for app-only authentication (Certificate).
 
+.PARAMETER FileExtensions
+  One or more file extensions (with or without leading dot) to download. Default: pdf only.
+  Example: -FileExtensions pdf,docx
+
 .EXAMPLE
   .\\copy-sharepoint-to-local.ps1 -SiteUrl https://tenant.sharepoint.com/sites/Team -LibraryName "Shared Documents" -SourceFolder Reports -LocalPath \\srv\\archive\\Reports -Recursive -Overwrite
 
@@ -85,6 +89,7 @@ param(
   [Parameter(Mandatory=$false)] [switch]$Recursive = $true,
   [Parameter(Mandatory=$false)] [switch]$Overwrite,
   [Parameter(Mandatory=$false)] [datetime]$ModifiedSince,
+  [Parameter(Mandatory=$false)] [string[]]$FileExtensions = @('pdf'),
   [Parameter(Mandatory=$false)] [ValidateSet('Interactive','DeviceLogin','Credentials','AppSecret','Certificate')] [string]$Auth = 'Interactive',
   [Parameter(Mandatory=$false)] [System.Management.Automation.PSCredential]$Credential,
   # App-only auth parameters
@@ -94,6 +99,37 @@ param(
   [Parameter(Mandatory=$false)] [string]$CertificatePath,
   [Parameter(Mandatory=$false)] [string]$CertificatePassword
 )
+
+function Get-NormalizedExtensions {
+  param([string[]]$Extensions)
+  $normalized = @()
+  if ($Extensions -and $Extensions.Count -gt 0) {
+    $normalized = $Extensions |
+      ForEach-Object {
+        if ($_ -ne $null) {
+          $_.ToString().Trim().TrimStart('.')
+        }
+      } |
+      Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne '*' } |
+      ForEach-Object { $_.ToLowerInvariant() } |
+      Select-Object -Unique
+  }
+  return $normalized
+}
+
+function Should-IncludeFile {
+  param(
+    [string]$FileName,
+    [string[]]$AllowedExtensions
+  )
+
+  if (-not $AllowedExtensions -or $AllowedExtensions.Count -eq 0) { return $true }
+
+  $ext = [System.IO.Path]::GetExtension($FileName)
+  if ([string]::IsNullOrEmpty($ext)) { return $false }
+  $normalizedExt = $ext.TrimStart('.').ToLowerInvariant()
+  return $AllowedExtensions -contains $normalizedExt
+}
 
 function Ensure-Module {
   param([string]$Name)
@@ -183,7 +219,8 @@ function Copy-SharePointFolder {
     [string]$LocalPath,
     [switch]$Recursive,
     [switch]$Overwrite,
-    [datetime]$ModifiedSince
+    [datetime]$ModifiedSince,
+    [string[]]$AllowedExtensions
   )
 
   $web = Get-PnPWeb -Includes ServerRelativeUrl
@@ -199,7 +236,9 @@ function Copy-SharePointFolder {
     throw "Folder not found or not accessible: $FolderServerRelative ($_ )"
   }
 
-  foreach ($f in $files) {
+  $targetFiles = $files | Where-Object { Should-IncludeFile -FileName $_.Name -AllowedExtensions $AllowedExtensions }
+
+  foreach ($f in $targetFiles) {
     $serverRel = if ($f.ServerRelativeUrl) { $f.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $f.Name) }
     Download-File -ServerRelativeUrl $serverRel -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince
   }
@@ -210,7 +249,7 @@ function Copy-SharePointFolder {
       $subServerRel = if ($sf.ServerRelativeUrl) { $sf.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $sf.Name) }
       $localSub = Join-Path -Path $LocalPath -ChildPath $sf.Name
       Ensure-Directory -Path $localSub
-      Copy-SharePointFolder -FolderServerRelative $subServerRel -LocalPath $localSub -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince
+      Copy-SharePointFolder -FolderServerRelative $subServerRel -LocalPath $localSub -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $AllowedExtensions
     }
   }
 }
@@ -218,6 +257,7 @@ function Copy-SharePointFolder {
 # --- Main ---
 
 try {
+  $normalizedExtensions = Get-NormalizedExtensions -Extensions $FileExtensions
   Ensure-Module -Name 'PnP.PowerShell'
   switch ($Auth) {
     'Interactive' { Connect-PnPOnline -Url $SiteUrl -Interactive -ErrorAction Stop }
@@ -250,8 +290,14 @@ try {
   $folderServerRel = Resolve-ServerRelativeFolderUrl -LibraryName $LibraryName -SourceFolder $SourceFolder -ServerRelativeUrl $ServerRelativeUrl
   Write-Host "Source: $folderServerRel`nTarget: $LocalPath" -ForegroundColor Green
   if ($ModifiedSince) { Write-Host ("Only files modified since: {0:u}" -f $ModifiedSince) -ForegroundColor Yellow }
+  if ($normalizedExtensions -and $normalizedExtensions.Count -gt 0) {
+    $displayExt = $normalizedExtensions | ForEach-Object { ".$_" }
+    Write-Host "File extensions: $($displayExt -join ', ')" -ForegroundColor Green
+  } else {
+    Write-Host "File extensions: all" -ForegroundColor Green
+  }
 
-  Copy-SharePointFolder -FolderServerRelative $folderServerRel -LocalPath $LocalPath -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince
+  Copy-SharePointFolder -FolderServerRelative $folderServerRel -LocalPath $LocalPath -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $normalizedExtensions
 
   Write-Host "Completed." -ForegroundColor Green
 }

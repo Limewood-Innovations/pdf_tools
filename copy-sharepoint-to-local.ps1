@@ -53,6 +53,14 @@
 .PARAMETER CertificatePassword
   Password for the PFX certificate (string) for app-only authentication (Certificate).
 
+.PARAMETER FileExtensions
+  One or more file extensions (with or without leading dot) to download. Default: pdf only.
+  Example: -FileExtensions pdf,docx
+
+.PARAMETER MoveToFertig
+  After each successful download move the original SharePoint file into a "Fertig" subfolder.
+  Default: $true (disable with -MoveToFertig:$false).
+
 .EXAMPLE
   .\\copy-sharepoint-to-local.ps1 -SiteUrl https://tenant.sharepoint.com/sites/Team -LibraryName "Shared Documents" -SourceFolder Reports -LocalPath \\srv\\archive\\Reports -Recursive -Overwrite
 
@@ -82,9 +90,11 @@ param(
   [Parameter(Mandatory=$false)] [string]$ServerRelativeUrl,
   [Parameter(Mandatory=$false)] [string]$SourceFolder = "",
   [Parameter(Mandatory=$true)]  [string]$LocalPath,
-  [Parameter(Mandatory=$false)] [switch]$Recursive = $true,
+  [Parameter(Mandatory=$false)] [switch]$Recursive = $false,
   [Parameter(Mandatory=$false)] [switch]$Overwrite,
   [Parameter(Mandatory=$false)] [datetime]$ModifiedSince,
+  [Parameter(Mandatory=$false)] [string[]]$FileExtensions = @('pdf'),
+  [Parameter(Mandatory=$false)] [bool]$MoveToFertig = $true,
   [Parameter(Mandatory=$false)] [ValidateSet('Interactive','DeviceLogin','Credentials','AppSecret','Certificate')] [string]$Auth = 'Interactive',
   [Parameter(Mandatory=$false)] [System.Management.Automation.PSCredential]$Credential,
   # App-only auth parameters
@@ -94,6 +104,37 @@ param(
   [Parameter(Mandatory=$false)] [string]$CertificatePath,
   [Parameter(Mandatory=$false)] [string]$CertificatePassword
 )
+
+function Get-NormalizedExtensions {
+  param([string[]]$Extensions)
+  $normalized = @()
+  if ($Extensions -and $Extensions.Count -gt 0) {
+    $normalized = $Extensions |
+      ForEach-Object {
+        if ($_ -ne $null) {
+          $_.ToString().Trim().TrimStart('.')
+        }
+      } |
+      Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne '*' } |
+      ForEach-Object { $_.ToLowerInvariant() } |
+      Select-Object -Unique
+  }
+  return $normalized
+}
+
+function Should-IncludeFile {
+  param(
+    [string]$FileName,
+    [string[]]$AllowedExtensions
+  )
+
+  if (-not $AllowedExtensions -or $AllowedExtensions.Count -eq 0) { return $true }
+
+  $ext = [System.IO.Path]::GetExtension($FileName)
+  if ([string]::IsNullOrEmpty($ext)) { return $false }
+  $normalizedExt = $ext.TrimStart('.').ToLowerInvariant()
+  return $AllowedExtensions -contains $normalizedExt
+}
 
 function Ensure-Module {
   param([string]$Name)
@@ -144,7 +185,10 @@ function Download-File {
     [string]$TargetDirectory,
     [string]$TargetFileName,
     [switch]$Overwrite,
-    [datetime]$ModifiedSince
+    [datetime]$ModifiedSince,
+    [string]$ParentFolderServerRelative,
+    [string]$SiteServerRelative,
+    [bool]$MoveToFertig
   )
 
   Ensure-Directory -Path $TargetDirectory
@@ -172,6 +216,19 @@ function Download-File {
   if ($shouldDownload) {
     Write-Host "Downloading: $ServerRelativeUrl -> $target" -ForegroundColor Cyan
     Get-PnPFile -Url $ServerRelativeUrl -Path $TargetDirectory -FileName $TargetFileName -AsFile -Force:$Overwrite.IsPresent -ErrorAction Stop | Out-Null
+
+    if ($MoveToFertig) {
+      $fertigFolderServer = Join-Url -a $ParentFolderServerRelative -b 'Fertig'
+      try {
+        $fertigSiteRelative = Get-SiteRelativePath -ServerRelativeUrl $fertigFolderServer -SiteServerRelative $SiteServerRelative
+        Resolve-PnPFolder -SiteRelativePath $fertigSiteRelative | Out-Null
+        $targetUrl = Join-Url -a $fertigFolderServer -b $TargetFileName
+        Move-PnPFile -ServerRelativeUrl $ServerRelativeUrl -TargetUrl $targetUrl -Overwrite -AllowSchemaMismatch -Force -ErrorAction Stop
+        Write-Host "Moved to Fertig: $ServerRelativeUrl -> $targetUrl" -ForegroundColor DarkCyan
+      } catch {
+        Write-Warning "Downloaded but failed to move to Fertig: $ServerRelativeUrl ($_ )"
+      }
+    }
   } else {
     Write-Host "Skip (up-to-date): $ServerRelativeUrl" -ForegroundColor DarkGray
   }
@@ -183,11 +240,16 @@ function Copy-SharePointFolder {
     [string]$LocalPath,
     [switch]$Recursive,
     [switch]$Overwrite,
-    [datetime]$ModifiedSince
+    [datetime]$ModifiedSince,
+    [string[]]$AllowedExtensions,
+    [string]$SiteServerRelative,
+    [bool]$MoveToFertig
   )
 
-  $web = Get-PnPWeb -Includes ServerRelativeUrl
-  $sitePrefix = $web.ServerRelativeUrl
+  if (-not $SiteServerRelative) {
+    $SiteServerRelative = (Get-PnPWeb -Includes ServerRelativeUrl).ServerRelativeUrl
+  }
+  $sitePrefix = $SiteServerRelative
   if ($sitePrefix -eq '/') { $sitePrefix = '' }
   $siteRelative = Get-SiteRelativePath -ServerRelativeUrl $FolderServerRelative -SiteServerRelative $sitePrefix
 
@@ -199,9 +261,11 @@ function Copy-SharePointFolder {
     throw "Folder not found or not accessible: $FolderServerRelative ($_ )"
   }
 
-  foreach ($f in $files) {
+  $targetFiles = $files | Where-Object { Should-IncludeFile -FileName $_.Name -AllowedExtensions $AllowedExtensions }
+
+  foreach ($f in $targetFiles) {
     $serverRel = if ($f.ServerRelativeUrl) { $f.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $f.Name) }
-    Download-File -ServerRelativeUrl $serverRel -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince
+    Download-File -ServerRelativeUrl $serverRel -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
   }
 
   if ($Recursive) {
@@ -210,7 +274,7 @@ function Copy-SharePointFolder {
       $subServerRel = if ($sf.ServerRelativeUrl) { $sf.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $sf.Name) }
       $localSub = Join-Path -Path $LocalPath -ChildPath $sf.Name
       Ensure-Directory -Path $localSub
-      Copy-SharePointFolder -FolderServerRelative $subServerRel -LocalPath $localSub -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince
+      Copy-SharePointFolder -FolderServerRelative $subServerRel -LocalPath $localSub -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $AllowedExtensions -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
     }
   }
 }
@@ -218,6 +282,7 @@ function Copy-SharePointFolder {
 # --- Main ---
 
 try {
+  $normalizedExtensions = Get-NormalizedExtensions -Extensions $FileExtensions
   Ensure-Module -Name 'PnP.PowerShell'
   switch ($Auth) {
     'Interactive' { Connect-PnPOnline -Url $SiteUrl -Interactive -ErrorAction Stop }
@@ -250,8 +315,14 @@ try {
   $folderServerRel = Resolve-ServerRelativeFolderUrl -LibraryName $LibraryName -SourceFolder $SourceFolder -ServerRelativeUrl $ServerRelativeUrl
   Write-Host "Source: $folderServerRel`nTarget: $LocalPath" -ForegroundColor Green
   if ($ModifiedSince) { Write-Host ("Only files modified since: {0:u}" -f $ModifiedSince) -ForegroundColor Yellow }
+  if ($normalizedExtensions -and $normalizedExtensions.Count -gt 0) {
+    $displayExt = $normalizedExtensions | ForEach-Object { ".$_" }
+    Write-Host "File extensions: $($displayExt -join ', ')" -ForegroundColor Green
+  } else {
+    Write-Host "File extensions: all" -ForegroundColor Green
+  }
 
-  Copy-SharePointFolder -FolderServerRelative $folderServerRel -LocalPath $LocalPath -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince
+  Copy-SharePointFolder -FolderServerRelative $folderServerRel -LocalPath $LocalPath -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $normalizedExtensions -SiteServerRelative $null -MoveToFertig:$MoveToFertig
 
   Write-Host "Completed." -ForegroundColor Green
 }

@@ -5,7 +5,10 @@ import re
 import sys
 from pathlib import Path
 import shutil
+import uuid
 from typing import Iterable, Optional
+
+from convert import to_pdf14_untagged
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import DictionaryObject, NameObject
@@ -57,6 +60,28 @@ def configure_logging(log_file: Optional[Path]) -> None:
         file_handler.setFormatter(StripColorFormatter("%(asctime)s %(levelname)s %(message)s"))
         logger.addHandler(file_handler)
 
+
+def _create_pdf_writer() -> PdfWriter:
+    writer = PdfWriter()
+    try:
+        writer.pdf_header = "%PDF-1.4"
+    except Exception:
+        pass
+    return writer
+
+
+def ensure_pdf14(path: Path) -> None:
+    """Convert the file at `path` to PDF 1.4 using the shared converter."""
+    temp_path = path.with_name(f"{path.stem}.__tmp_{uuid.uuid4().hex}{path.suffix}")
+    try:
+        to_pdf14_untagged(str(path), str(temp_path))
+        temp_path.replace(path)
+    except Exception:
+        logger.exception("PDF 1.4 conversion failed for %s", path)
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+        raise
+
 def split_every_n_pages(src_pdf: Path, out_dir: Path, n: int = 2) -> list[Path]:
     if n <= 0:
         raise ValueError("split_every_n_pages requires n > 0")
@@ -67,7 +92,7 @@ def split_every_n_pages(src_pdf: Path, out_dir: Path, n: int = 2) -> list[Path]:
     idx = 0
     part_no = 1
     while idx < total:
-        writer = PdfWriter()
+        writer = _create_pdf_writer()
         for j in range(n):
             if idx + j < total:
                 writer.add_page(reader.pages[idx + j])
@@ -75,6 +100,7 @@ def split_every_n_pages(src_pdf: Path, out_dir: Path, n: int = 2) -> list[Path]:
         out_path = out_dir / f"{src_pdf.stem}_part_{part_no:03d}.pdf"
         with out_path.open("wb") as f:
             writer.write(f)
+        ensure_pdf14(out_path)
         parts.append(out_path)
         part_no += 1
         idx += n
@@ -245,7 +271,7 @@ def remove_blank_pages(
     fallback_on_all_blank: bool = True,
 ) -> int:
     reader = PdfReader(str(src_pdf))
-    writer = PdfWriter()
+    writer = _create_pdf_writer()
     removed = 0
     kept = 0
     for p in reader.pages:
@@ -274,6 +300,7 @@ def remove_blank_pages(
         if fallback_on_all_blank:
             try:
                 shutil.copy2(src_pdf, dst_pdf)
+                ensure_pdf14(dst_pdf)
             except Exception:
                 # As a secondary fallback, write an unmodified copy via PdfWriter
                 for p in reader.pages:
@@ -281,16 +308,20 @@ def remove_blank_pages(
                 _strip_tags_from_writer(writer)
                 with dst_pdf.open("wb") as f:
                     writer.write(f)
+                ensure_pdf14(dst_pdf)
         else:
             # Write an empty PDF (no pages) to signal removal of all pages
+            empty_writer = _create_pdf_writer()
             with dst_pdf.open("wb") as f:
-                PdfWriter().write(f)
+                empty_writer.write(f)
+            ensure_pdf14(dst_pdf)
         return removed
 
     _strip_tags_from_writer(writer)
     dst_pdf.parent.mkdir(parents=True, exist_ok=True)
     with dst_pdf.open("wb") as f:
         writer.write(f)
+    ensure_pdf14(dst_pdf)
     return removed
 
 def _strip_tags_from_writer(writer: PdfWriter) -> None:
@@ -382,6 +413,7 @@ def process(
                 out_dir_split.mkdir(parents=True, exist_ok=True)
                 target = out_dir_split / src.name
                 shutil.copy2(src, target)
+                ensure_pdf14(target)
                 parts = [target]
 
             total_parts += len(parts)
@@ -419,6 +451,7 @@ def process(
                         try:
                             shutil.copy2(p, dst)
                             removed = 0
+                            ensure_pdf14(dst)
                         except Exception:
                             # Skip if copy also fails
                             continue
@@ -507,3 +540,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

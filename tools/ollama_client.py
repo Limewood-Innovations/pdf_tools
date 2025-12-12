@@ -36,55 +36,25 @@ class IbanExtractionResult:
     evidence_excerpt: Optional[str]
 
 
-# System prompt for IBAN/BIC extraction from document images
-LLM_SYSTEM_PROMPT = """You are a precise information extraction engine. 
-Extract banking identifiers from document images.  
-Follow the schema exactly. 
-Do not include any extra commentary.  
-If uncertain, return null for the field. 
-Never hallucinate.
+# Concise system prompt optimized for vision models
+LLM_SYSTEM_PROMPT = """Extract IBAN and BIC from the document image.
 
-TASK:
-From the provided document image, extract the best candidate IBAN and BIC.
-Return a single JSON object.
-
-REQUIREMENTS:
-1) SCOPE
-   - Extract up to ONE IBAN and ONE BIC most relevant to payments (ignore examples, footers, unrelated references).
-   - Consider common labels: "IBAN", "IBAN-Nr.", "IBAN:", "Kontonummer (IBAN)", "International Bank Account Number",
-     "BIC", "SWIFT", "SWIFT/BIC", "SWIFT-Code".
-   - Handle OCR noise: extra spaces, line breaks, dots, non-breaking spaces.
-
-2) IBAN RULES
-   - Pattern (loose): country code A–Z (2 letters), 2 check digits (0–9), then up to 30 alphanumerics.
-   - Normalize by removing spaces, tabs, newlines, hyphens, and dots; uppercase all letters.
-
-3) BIC RULES
-   - Pattern (strict): 8 or 11 characters.
-     Regex: `^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$`
-   - Normalize by uppercasing; remove spaces and punctuation if present.
-   - If both 8- and 11-char variants appear for the same bank, prefer the 11-char version.
-
-4) DISAMBIGUATION
-   - If multiple candidates exist, choose the one closest to explicit payment context (e.g., headings "Zahlung", "Überweisung", "Invoice", "Payment details").
-   - Prefer IBAN/BIC pairs that appear near each other.
-   - If nothing plausible is found, set fields to null.
-
-5) OUTPUT FORMAT (JSON ONLY)
+Return ONLY valid JSON in this exact format:
 {
-  "iban_raw": string | null,      // as it appears in the document (may include spaces)
-  "IBAN": string | null,          // e.g., "AT771234456778911234"
-  "BIC_raw": string | null,       // as it appears in the document
-  "BIC": string | null,           // uppercase, no spaces
-  "confidence": number,           // 0.0–1.0 overall confidence in the extracted pair
-  "evidence_excerpt": string | null
+  "iban_raw": "IBAN as shown in document",
+  "IBAN": "AT771234567890123456",
+  "BIC_raw": "BIC as shown",
+  "BIC": "BKAUATWW",
+  "confidence": 0.95,
+  "evidence_excerpt": "short excerpt"
 }
 
-CONSTRAINTS:
-- Output MUST be valid JSON. No extra text.
-- Do not invent values. If missing, use null.
-- Keep `evidence_excerpt` short and redact personal data not needed.
-"""
+Rules:
+- Extract payment-related IBAN (Austrian: AT + 2 digits + 16 digits)
+- Extract BIC (8 or 11 uppercase characters)
+- Normalize: remove spaces, uppercase
+- Use null if not found
+- Return ONLY JSON, no other text"""
 
 
 def pdf_to_base64_images(pdf_path: Path, dpi: int = 200) -> list[str]:
@@ -172,11 +142,16 @@ def call_ollama_for_iban_from_pdf(
         "messages": [
             {
                 "role": "user",
-                "content": LLM_SYSTEM_PROMPT + "\n\nExtract IBAN and BIC from this document:",
+                "content": LLM_SYSTEM_PROMPT,
                 "images": pdf_base64_images,  # Send all pages
             }
         ],
         "stream": False,
+        "format": "json",  # Force JSON output
+        "options": {
+            "temperature": 0.1,  # Lower temperature for more deterministic output
+            "num_predict": 500,  # Allow up to 500 tokens for the response
+        }
     }
 
     resp = requests.post(f"{ollama_url}/api/chat", json=payload, timeout=timeout)

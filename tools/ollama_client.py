@@ -134,7 +134,7 @@ def call_ollama_for_iban_from_pdf(
     pdf_path: Path,
     model: str = None,
     ollama_url: str = None,
-    timeout: int = 300,
+    timeout: int = 900,
 ) -> IbanExtractionResult:
     """Extract IBAN and BIC from all pages of PDF using Ollama vision model.
 

@@ -12,6 +12,13 @@ Usage:
 import argparse
 import subprocess
 from pathlib import Path
+import sys
+
+# Add the project root to sys.path to enable importing from tools
+# This ensures the script works when run from any directory
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from tools.setup_logging import setup_logging
 from tools.find_ghostscript import find_ghostscript

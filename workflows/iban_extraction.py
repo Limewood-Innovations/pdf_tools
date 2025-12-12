@@ -18,6 +18,12 @@ from typing import List, Optional
 
 import shutil
 
+# Add the project root to sys.path to enable importing from tools
+# This ensures the script works when run from any directory
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from tools.split_pages import split_every_n_pages
 from tools.ollama_client import call_ollama_for_iban_from_pdf
 from tools.iban_validator import validate_austrian_iban, extract_account_info

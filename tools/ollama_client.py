@@ -108,9 +108,8 @@ def call_ollama_for_iban_from_pdf(
 ) -> IbanExtractionResult:
     """Extract IBAN and BIC from all pages of PDF using Ollama vision model.
 
-    Sends all pages of the PDF document to a locally hosted Ollama vision model 
-    (e.g., qwen3-vl:30b) with a structured prompt designed for precise extraction 
-    of banking identifiers.
+    Sends each page of the PDF document separately to a locally hosted Ollama 
+    vision model to avoid overwhelming the model with too many images at once.
 
     Args:
         pdf_path: Path to the PDF file.
@@ -118,7 +117,7 @@ def call_ollama_for_iban_from_pdf(
             or defaults to ``"qwen3-vl:30b"``.
         ollama_url: Ollama API base URL. If ``None``, uses ``OLLAMA_URL`` env
             var or defaults to ``"http://localhost:11434"``.
-        timeout: Request timeout in seconds (default: 300).
+        timeout: Request timeout in seconds (default: 900).
 
     Returns:
         IbanExtractionResult: Parsed extraction result with IBAN, BIC, and
@@ -134,54 +133,76 @@ def call_ollama_for_iban_from_pdf(
     if ollama_url is None:
         ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
 
-    # Convert all pages of PDF to base64 images for vision model
-    pdf_base64_images = pdf_to_base64_images(pdf_path)
+    # Convert all pages of PDF to base64 images with lower DPI
+    pdf_base64_images = pdf_to_base64_images(pdf_path, dpi=150)
 
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": LLM_SYSTEM_PROMPT,
-                "images": pdf_base64_images,  # Send all pages
+    # Process each page separately and keep the best result
+    best_result = None
+    best_confidence = 0.0
+
+    for page_idx, image_b64 in enumerate(pdf_base64_images, 1):
+        try:
+            payload = {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": LLM_SYSTEM_PROMPT,
+                        "images": [image_b64],  # Send only ONE page at a time
+                    }
+                ],
+                "stream": False,
+                "format": "json",  # Force JSON output
+                "options": {
+                    "temperature": 0.1,  # Lower temperature for more deterministic output
+                    "num_predict": 500,  # Allow up to 500 tokens for the response
+                }
             }
-        ],
-        "stream": False,
-        "format": "json",  # Force JSON output
-        "options": {
-            "temperature": 0.1,  # Lower temperature for more deterministic output
-            "num_predict": 500,  # Allow up to 500 tokens for the response
-        }
-    }
 
-    resp = requests.post(f"{ollama_url}/api/chat", json=payload, timeout=timeout)
-    resp.raise_for_status()
-    data = resp.json()
+            resp = requests.post(f"{ollama_url}/api/chat", json=payload, timeout=timeout)
+            resp.raise_for_status()
+            data = resp.json()
 
-    # Ollama returns: {"message": {"role": "...", "content": "..."}, ...}
-    content = data.get("message", {}).get("content", "").strip()
+            content = data.get("message", {}).get("content", "").strip()
 
-    if not content:
-        raise ValueError(
-            f"LLM returned empty content. Full response: {json.dumps(data, indent=2)}"
-        )
+            if not content:
+                # Page didn't contain IBAN/BIC, try next page
+                continue
 
-    try:
-        obj = json.loads(content)
-    except json.JSONDecodeError as e:
-        raise ValueError(
-            f"LLM did not return valid JSON: {e}\n"
-            f"Content received: {content[:500]}...\n"
-            f"Full response: {json.dumps(data, indent=2)}"
-        ) from e
+            try:
+                obj = json.loads(content)
+            except json.JSONDecodeError:
+                # Invalid JSON on this page, try next
+                continue
 
-    return IbanExtractionResult(
-        iban_raw=obj.get("iban_raw"),
-        iban=obj.get("IBAN"),
-        bic_raw=obj.get("BIC_raw"),
-        bic=obj.get("BIC"),
-        confidence=float(obj.get("confidence", 0.0)),
-        evidence_excerpt=obj.get("evidence_excerpt"),
+            # Check if we found an IBAN
+            iban = obj.get("IBAN")
+            if iban:
+                confidence = float(obj.get("confidence", 0.0))
+                # Keep the result with the highest confidence
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    best_result = IbanExtractionResult(
+                        iban_raw=obj.get("iban_raw"),
+                        iban=iban,
+                        bic_raw=obj.get("BIC_raw"),
+                        bic=obj.get("BIC"),
+                        confidence=confidence,
+                        evidence_excerpt=obj.get("evidence_excerpt"),
+                    )
+
+        except Exception as e:
+            # Log but continue with next page
+            print(f"Warning: Page {page_idx} processing failed: {e}")
+            continue
+
+    # If we found a result across any page, return it
+    if best_result:
+        return best_result
+
+    # No IBAN found on any page
+    raise ValueError(
+        f"No IBAN found on any page of the PDF. Processed {len(pdf_base64_images)} page(s)."
     )
 
 

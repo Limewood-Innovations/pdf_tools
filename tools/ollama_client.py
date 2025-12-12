@@ -259,7 +259,26 @@ def call_ollama_for_iban(
 
     content = data.get("message", {}).get("content", "").strip()
 
+    if not content:
+        raise ValueError(
+            f"LLM returned empty content. Full response: {json.dumps(data, indent=2)}"
+        )
+
+    try:
+        obj = json.loads(content)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"LLM did not return valid JSON: {e}\n"
+            f"Content received: {content[:500]}...\n"
+            f"Full response: {json.dumps(data, indent=2)}"
+        ) from e
+
+    return IbanExtractionResult(
+        iban_raw=obj.get("iban_raw"),
+        iban=obj.get("IBAN"),
+        bic_raw=obj.get("BIC_raw"),
         bic=obj.get("BIC"),
         confidence=float(obj.get("confidence", 0.0)),
         evidence_excerpt=obj.get("evidence_excerpt"),
     )
+

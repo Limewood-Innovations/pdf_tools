@@ -291,10 +291,10 @@ $new_targetFiles = foreach ($f in $targetFiles) {
     Get-Item -LiteralPath $destPath
 }
 
-  Write-Host "Found $($new_target_files.Count) file(s) in $FolderServerRelative" -ForegroundColor Green
+  Write-Host "Found $($new_targetFiles.Count) file(s) in $FolderServerRelative" -ForegroundColor Green
 
 
-  foreach ($f in $new_target_files) {
+  foreach ($f in $new_targetFiles) {
     $serverRel = if ($f.ServerRelativeUrl) { $f.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $f.Name) }
     Download-File -ServerRelativeUrl $serverRel -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
   }

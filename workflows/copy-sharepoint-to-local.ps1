@@ -310,7 +310,7 @@ $new_targetFiles = foreach ($f in $targetFiles) {
     # --- Rename in SharePoint (same folder)
     # no confirmation
 
-    Rename-PnPFile -ServerRelativeUrl $serverRel -TargetFileName $newName -OverwriteIfAlreadyExists
+    Rename-PnPFile -ServerRelativeUrl $serverRel -TargetFileName $newName -OverwriteIfAlreadyExists -Force
 
     # --- Return a “renamed file” object for your next loop
     [pscustomobject]@{

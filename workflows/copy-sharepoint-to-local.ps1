@@ -278,9 +278,10 @@ function Copy-SharePointFolder {
     return $_
   }
 
-  Write-Host "Found $($new_targetFiles.Count) files in $FolderServerRelative" -ForegroundColor Green
+  Write-Host "Found $($new_targetFiles.Count) file(s) in $FolderServerRelative" -ForegroundColor Green
 
-  foreach ($f in $newtargetFiles) {
+
+  foreach ($f in $new_targetFiles) {
     $serverRel = if ($f.ServerRelativeUrl) { $f.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $f.Name) }
     Download-File -ServerRelativeUrl $serverRel -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
   }

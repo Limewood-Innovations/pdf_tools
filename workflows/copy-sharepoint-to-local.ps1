@@ -221,6 +221,7 @@ function Download-File {
     if ($MoveToFertig) {
       # Move to folder located ../NHG_Rech_Fertig/$SourceFolder
       $fertigFolderServer = Join-Url -a $ParentFolderServerRelative -b "../NHG_Rech_Fertig/$SourceFolder"
+      Write-Host "Moving to Fertig folder: $fertigFolderServer" -ForegroundColor DarkCyan
       try {
         $fertigSiteRelative = Get-SiteRelativePath -ServerRelativeUrl $fertigFolderServer -SiteServerRelative $SiteServerRelative
         Resolve-PnPFolder -SiteRelativePath $fertigSiteRelative | Out-Null

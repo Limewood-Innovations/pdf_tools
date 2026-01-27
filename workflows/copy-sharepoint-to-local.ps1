@@ -272,61 +272,55 @@ function Copy-SharePointFolder {
 
 $new_targetFiles = foreach ($f in $targetFiles) {
 
-    # --- Get a usable file name (SharePoint objects can vary)
+    # --- Get a usable file name (SP objects vary)
     $name =
         if ($f.Name) { $f.Name }
         elseif ($f.FileLeafRef) { $f.FileLeafRef }
         elseif ($f.LeafName) { $f.LeafName }
-        elseif ($f.File.Name) { $f.File.Name }
+        elseif ($f.File -and $f.File.Name) { $f.File.Name }
         else { $null }
 
     if ([string]::IsNullOrWhiteSpace($name)) {
-        Write-Warning "Skipping item because no file name property was found. Type: $($f.GetType().FullName)"
+        Write-Warning "Skipping item (no filename). Type=$($f.GetType().FullName)"
         continue
     }
 
-    # --- Choose a timestamp (prefer SharePoint modified time if available)
+    # --- Build server-relative URL to the file
+    $serverRel =
+        if ($f.ServerRelativeUrl) { $f.ServerRelativeUrl }
+        else { (Join-Url -a $FolderServerRelative -b $name) }
+
+    if ([string]::IsNullOrWhiteSpace($serverRel)) {
+        Write-Warning "Skipping '$name' (ServerRelativeUrl is null)"
+        continue
+    }
+
+    # --- Timestamp (prefer SP modified date if present, else now)
     $dt =
         if ($f.TimeLastModified) { $f.TimeLastModified }
         elseif ($f.Modified) { $f.Modified }
         elseif ($f.LastModifiedTime) { $f.LastModifiedTime }
         else { Get-Date }
 
-    # Ensure it's a DateTime
     try { $dt = [datetime]$dt } catch { $dt = Get-Date }
-
     $ts = $dt.ToString('yyyy_MM_dd_HHmmss')
-    $renamed = "{0}_{1}" -f $ts, $name
 
-    # Return an object with both original + renamed name
+    $newName = "${ts}_$name"
+
+    # --- Rename in SharePoint (same folder)
+    Rename-PnPFile -ServerRelativeUrl $serverRel -TargetFileName $newName -OverwriteIfAlreadyExists
+
+    # --- Return a “renamed file” object for your next loop
     [pscustomobject]@{
-        OriginalObject  = $f
-        Name            = $name
-        RenamedName     = $renamed
-        ServerRelativeUrl = $f.ServerRelativeUrl
+        Name              = $newName
+        ServerRelativeUrl = (Join-Url -a (Split-Path $serverRel -Parent).Replace('\','/') -b $newName)
     }
 }
 
-foreach ($x in $new_targetFiles) {
-
-    # Use original SharePoint object for server-relative logic if you want
-    $f = $x.OriginalObject
-
-    $serverRel =
-        if ($x.ServerRelativeUrl) { $x.ServerRelativeUrl }
-        else { (Join-Url -a $FolderServerRelative -b $x.Name) }
-
-    if ([string]::IsNullOrWhiteSpace($serverRel)) {
-        Write-Warning "Skipping '$($x.Name)' because ServerRelativeUrl could not be built."
-        continue
-    }
-
-    if ([string]::IsNullOrWhiteSpace($x.RenamedName)) {
-        Write-Warning "Skipping because RenamedName is null for '$($x.Name)'."
-        continue
-    }
-      Download-File -ServerRelativeUrl $serverRel -LibraryName $LibraryName -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
-  }
+# Now use the renamed files
+foreach ($f in $new_targetFiles) {
+    Download-File -ServerRelativeUrl $f.ServerRelativeUrl -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
+}
 
   if ($Recursive) {
     $subFolders = Get-PnPFolderItem -FolderSiteRelativeUrl $siteRelative -ItemType Folder | Where-Object { $_.Name -ne 'Forms' }

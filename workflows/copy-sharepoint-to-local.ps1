@@ -267,36 +267,62 @@ function Copy-SharePointFolder {
 
   $targetFiles = $files | Where-Object { Should-IncludeFile -FileName $_.Name -AllowedExtensions $AllowedExtensions }
 
-# Rename to yyyy_MM_dd_HHmmss_filename.ext (timestamp taken from LastWriteTime)
 $new_targetFiles = foreach ($f in $targetFiles) {
 
-    $ts = $f.LastWriteTime.ToString('yyyy_MM_dd_HHmmss')  # or Get-Date for "now"
-    $newName = "{0}_{1}{2}" -f $ts, $f.BaseName, $f.Extension
+    # --- Get a usable file name (SharePoint objects can vary)
+    $name =
+        if ($f.Name) { $f.Name }
+        elseif ($f.FileLeafRef) { $f.FileLeafRef }
+        elseif ($f.LeafName) { $f.LeafName }
+        elseif ($f.File.Name) { $f.File.Name }
+        else { $null }
 
-    # Avoid collisions (if two files end up with same name)
-    $destPath = Join-Path $f.DirectoryName $newName
-    if (Test-Path -LiteralPath $destPath) {
-        $i = 1
-        do {
-            $newName2 = "{0}_{1}({2}){3}" -f $ts, $f.BaseName, $i, $f.Extension
-            $destPath = Join-Path $f.DirectoryName $newName2
-            $i++
-        } while (Test-Path -LiteralPath $destPath)
-        $newName = $newName2
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        Write-Warning "Skipping item because no file name property was found. Type: $($f.GetType().FullName)"
+        continue
     }
 
-    Rename-Item -LiteralPath $f.FullName -NewName $newName
+    # --- Choose a timestamp (prefer SharePoint modified time if available)
+    $dt =
+        if ($f.TimeLastModified) { $f.TimeLastModified }
+        elseif ($f.Modified) { $f.Modified }
+        elseif ($f.LastModifiedTime) { $f.LastModifiedTime }
+        else { Get-Date }
 
-    # Return the updated FileInfo object
-    Get-Item -LiteralPath $destPath
+    # Ensure it's a DateTime
+    try { $dt = [datetime]$dt } catch { $dt = Get-Date }
+
+    $ts = $dt.ToString('yyyy_MM_dd_HHmmss')
+    $renamed = "{0}_{1}" -f $ts, $name
+
+    # Return an object with both original + renamed name
+    [pscustomobject]@{
+        OriginalObject  = $f
+        Name            = $name
+        RenamedName     = $renamed
+        ServerRelativeUrl = $f.ServerRelativeUrl
+    }
 }
 
-  Write-Host "Found $($new_targetFiles.Count) file(s) in $FolderServerRelative" -ForegroundColor Green
+foreach ($x in $new_targetFiles) {
 
+    # Use original SharePoint object for server-relative logic if you want
+    $f = $x.OriginalObject
 
-  foreach ($f in $new_targetFiles) {
-    $serverRel = if ($f.ServerRelativeUrl) { $f.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $f.Name) }
-    Download-File -ServerRelativeUrl $serverRel -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
+    $serverRel =
+        if ($x.ServerRelativeUrl) { $x.ServerRelativeUrl }
+        else { (Join-Url -a $FolderServerRelative -b $x.Name) }
+
+    if ([string]::IsNullOrWhiteSpace($serverRel)) {
+        Write-Warning "Skipping '$($x.Name)' because ServerRelativeUrl could not be built."
+        continue
+    }
+
+    if ([string]::IsNullOrWhiteSpace($x.RenamedName)) {
+        Write-Warning "Skipping because RenamedName is null for '$($x.Name)'."
+        continue
+    }
+      Download-File -ServerRelativeUrl $serverRel -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
   }
 
   if ($Recursive) {

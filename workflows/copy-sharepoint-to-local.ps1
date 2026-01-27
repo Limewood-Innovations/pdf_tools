@@ -182,6 +182,7 @@ function Ensure-Directory {
 function Download-File {
   param(
     [string]$ServerRelativeUrl,
+    [string]$LibraryName,
     [string]$SourceFolder,
     [string]$TargetDirectory,
     [string]$TargetFileName,
@@ -219,8 +220,9 @@ function Download-File {
     Get-PnPFile -Url $ServerRelativeUrl -Path $TargetDirectory -FileName $TargetFileName -AsFile -Force:$Overwrite.IsPresent -ErrorAction Stop | Out-Null
 
     if ($MoveToFertig) {
-      # Move to folder located ../NHG_Rech_Fertig/$SourceFolder
-      $fertigFolderServer = Join-Url -a $ParentFolderServerRelative -b "../NHG_Rech_Fertig/$SourceFolder"
+      $fertigFolderServer = Join-Url -a $LibraryName -b "/NHG_Rech_Fertig/"
+      $fertigFolderServer = Join-Url -a $fertigFolderServer -b $SourceFolder
+
       Write-Host "Moving to Fertig folder: $fertigFolderServer" -ForegroundColor DarkCyan
       try {
         $fertigSiteRelative = Get-SiteRelativePath -ServerRelativeUrl $fertigFolderServer -SiteServerRelative $SiteServerRelative
@@ -240,6 +242,7 @@ function Download-File {
 function Copy-SharePointFolder {
   param(
     [string]$FolderServerRelative,
+    [string]$LibraryName,
     [string]$SourceFolder,
     [string]$LocalPath,
     [switch]$Recursive,
@@ -322,7 +325,7 @@ foreach ($x in $new_targetFiles) {
         Write-Warning "Skipping because RenamedName is null for '$($x.Name)'."
         continue
     }
-      Download-File -ServerRelativeUrl $serverRel -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
+      Download-File -ServerRelativeUrl $serverRel -LibraryName $LibraryName -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
   }
 
   if ($Recursive) {
@@ -379,7 +382,7 @@ try {
     Write-Host "File extensions: all" -ForegroundColor Green
   }
 
-  Copy-SharePointFolder -FolderServerRelative $folderServerRel -SourceFolder $SourceFolder -LocalPath $LocalPath -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $normalizedExtensions -SiteServerRelative $null -MoveToFertig:$MoveToFertig
+  Copy-SharePointFolder -FolderServerRelative $folderServerRel -LibraryName $LibraryName -SourceFolder $SourceFolder -LocalPath $LocalPath -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $normalizedExtensions -SiteServerRelative $null -MoveToFertig:$MoveToFertig
 
   Write-Host "Completed." -ForegroundColor Green
 }

@@ -182,6 +182,7 @@ function Ensure-Directory {
 function Download-File {
   param(
     [string]$ServerRelativeUrl,
+    [string]$SourceFolder,
     [string]$TargetDirectory,
     [string]$TargetFileName,
     [switch]$Overwrite,
@@ -218,7 +219,8 @@ function Download-File {
     Get-PnPFile -Url $ServerRelativeUrl -Path $TargetDirectory -FileName $TargetFileName -AsFile -Force:$Overwrite.IsPresent -ErrorAction Stop | Out-Null
 
     if ($MoveToFertig) {
-      $fertigFolderServer = Join-Url -a $ParentFolderServerRelative -b 'Fertig'
+      # Move to folder located ../NHG_Rech_Fertig/$SourceFolder
+      $fertigFolderServer = Join-Url -a $ParentFolderServerRelative -b "../NHG_Rech_Fertig/$SourceFolder"
       try {
         $fertigSiteRelative = Get-SiteRelativePath -ServerRelativeUrl $fertigFolderServer -SiteServerRelative $SiteServerRelative
         Resolve-PnPFolder -SiteRelativePath $fertigSiteRelative | Out-Null
@@ -237,6 +239,7 @@ function Download-File {
 function Copy-SharePointFolder {
   param(
     [string]$FolderServerRelative,
+    [string]$SourceFolder,
     [string]$LocalPath,
     [switch]$Recursive,
     [switch]$Overwrite,
@@ -263,9 +266,19 @@ function Copy-SharePointFolder {
 
   $targetFiles = $files | Where-Object { Should-IncludeFile -FileName $_.Name -AllowedExtensions $AllowedExtensions }
 
+  # Rename all files yyyy_mm_dd_HHMMSS_filename.ext
+  $targetFiles = $targetFiles | ForEach-Object {
+    $li = Get-PnPFile -Url $_.ServerRelativeUrl -AsListItem -ErrorAction Stop
+    $modified = [datetime]$li.FieldValues['Modified']
+    $timestamp = $modified.ToString("yyyy_MM_dd_HHmmss")
+    $newName = "$timestamp" + "_" + $_.Name
+    $_ | Add-Member -NotePropertyName 'Name' -NotePropertyValue $newName -Force
+    return $_
+  }
+
   foreach ($f in $targetFiles) {
     $serverRel = if ($f.ServerRelativeUrl) { $f.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $f.Name) }
-    Download-File -ServerRelativeUrl $serverRel -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
+    Download-File -ServerRelativeUrl $serverRel -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
   }
 
   if ($Recursive) {
@@ -274,7 +287,7 @@ function Copy-SharePointFolder {
       $subServerRel = if ($sf.ServerRelativeUrl) { $sf.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $sf.Name) }
       $localSub = Join-Path -Path $LocalPath -ChildPath $sf.Name
       Ensure-Directory -Path $localSub
-      Copy-SharePointFolder -FolderServerRelative $subServerRel -LocalPath $localSub -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $AllowedExtensions -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
+      Copy-SharePointFolder -FolderServerRelative $subServerRel -SourceFolder -LocalPath $localSub -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $AllowedExtensions -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
     }
   }
 }
@@ -322,7 +335,7 @@ try {
     Write-Host "File extensions: all" -ForegroundColor Green
   }
 
-  Copy-SharePointFolder -FolderServerRelative $folderServerRel -LocalPath $LocalPath -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $normalizedExtensions -SiteServerRelative $null -MoveToFertig:$MoveToFertig
+  Copy-SharePointFolder -FolderServerRelative $folderServerRel -SourceFolder $SourceFolder -LocalPath $LocalPath -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $normalizedExtensions -SiteServerRelative $null -MoveToFertig:$MoveToFertig
 
   Write-Host "Completed." -ForegroundColor Green
 }

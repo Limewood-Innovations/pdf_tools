@@ -308,6 +308,8 @@ $new_targetFiles = foreach ($f in $targetFiles) {
     $newName = "${ts}_$name"
 
     # --- Rename in SharePoint (same folder)
+    # no confirmation
+
     Rename-PnPFile -ServerRelativeUrl $serverRel -TargetFileName $newName -OverwriteIfAlreadyExists
 
     # --- Return a “renamed file” object for your next loop
@@ -319,7 +321,7 @@ $new_targetFiles = foreach ($f in $targetFiles) {
 
 # Now use the renamed files
 foreach ($f in $new_targetFiles) {
-    Download-File -ServerRelativeUrl $f.ServerRelativeUrl -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
+    Download-File -ServerRelativeUrl $f.ServerRelativeUrl -LibraryName $LibraryName -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
 }
 
   if ($Recursive) {

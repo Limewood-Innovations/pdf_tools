@@ -267,21 +267,34 @@ function Copy-SharePointFolder {
 
   $targetFiles = $files | Where-Object { Should-IncludeFile -FileName $_.Name -AllowedExtensions $AllowedExtensions }
 
-  # Rename all files yyyy_mm_dd_HHMMSS_filename.ext
-  $new_targetFiles = $targetFiles | ForEach-Object {
-    $li = Get-PnPFile -Url $_.ServerRelativeUrl -AsListItem -ErrorAction Stop
-    $modified = [datetime]$li.FieldValues['Modified']
-    $timestamp = $modified.ToString("yyyy_MM_dd_HHmmss")
-    $newName = "$timestamp" + "_" + $_.Name
-    $_ | Add-Member -NotePropertyName 'Name' -NotePropertyValue $newName -Force
-    Write-Host "Renaming file for download: $($_.Name) -> $newName" -ForegroundColor DarkYellow
-    return $_
-  }
+# Rename to yyyy_MM_dd_HHmmss_filename.ext (timestamp taken from LastWriteTime)
+$new_targetFiles = foreach ($f in $targetFiles) {
 
-  Write-Host "Found $($new_targetFiles.Count) file(s) in $FolderServerRelative" -ForegroundColor Green
+    $ts = $f.LastWriteTime.ToString('yyyy_MM_dd_HHmmss')  # or Get-Date for "now"
+    $newName = "{0}_{1}{2}" -f $ts, $f.BaseName, $f.Extension
+
+    # Avoid collisions (if two files end up with same name)
+    $destPath = Join-Path $f.DirectoryName $newName
+    if (Test-Path -LiteralPath $destPath) {
+        $i = 1
+        do {
+            $newName2 = "{0}_{1}({2}){3}" -f $ts, $f.BaseName, $i, $f.Extension
+            $destPath = Join-Path $f.DirectoryName $newName2
+            $i++
+        } while (Test-Path -LiteralPath $destPath)
+        $newName = $newName2
+    }
+
+    Rename-Item -LiteralPath $f.FullName -NewName $newName
+
+    # Return the updated FileInfo object
+    Get-Item -LiteralPath $destPath
+}
+
+  Write-Host "Found $($new_target_files.Count) file(s) in $FolderServerRelative" -ForegroundColor Green
 
 
-  foreach ($f in $new_targetFiles) {
+  foreach ($f in $new_target_files) {
     $serverRel = if ($f.ServerRelativeUrl) { $f.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $f.Name) }
     Download-File -ServerRelativeUrl $serverRel -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
   }

@@ -119,7 +119,8 @@ def normalize_pdf(
         f"-dPDFSETTINGS={pdf_settings}",
         "-dDetectDuplicateImages=true",
         "-dCompressFonts=true",
-        "-dSubsetFonts=true",
+        "-dEmbedAllFonts=true",
+        "-dSubsetFonts=false",
         f"-sOutputFile={str(output_pdf)}",
         str(input_pdf),
     ]

@@ -220,8 +220,8 @@ function Download-File {
     Get-PnPFile -Url $ServerRelativeUrl -Path $TargetDirectory -FileName $TargetFileName -AsFile -Force:$Overwrite.IsPresent -ErrorAction Stop | Out-Null
 
     if ($MoveToFertig) {
-      $fertigFolderServer = Join-Url -a $LibraryName -b "/NHG_Rech_Fertig/"
-      $fertigFolderServer = Join-Url -a $fertigFolderServer -b $SourceFolder
+      $fertigFolderServer1 = Join-Url -a $LibraryName -b "/NHG_Rech_Fertig/"
+      $fertigFolderServer = Join-Url -a $fertigFolderServer1 -b $SourceFolder
 
       Write-Host "Moving to Fertig folder: $fertigFolderServer" -ForegroundColor DarkCyan
       try {

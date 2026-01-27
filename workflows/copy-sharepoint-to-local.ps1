@@ -268,16 +268,19 @@ function Copy-SharePointFolder {
   $targetFiles = $files | Where-Object { Should-IncludeFile -FileName $_.Name -AllowedExtensions $AllowedExtensions }
 
   # Rename all files yyyy_mm_dd_HHMMSS_filename.ext
-  $targetFiles = $targetFiles | ForEach-Object {
+  $new_targetFiles = $targetFiles | ForEach-Object {
     $li = Get-PnPFile -Url $_.ServerRelativeUrl -AsListItem -ErrorAction Stop
     $modified = [datetime]$li.FieldValues['Modified']
     $timestamp = $modified.ToString("yyyy_MM_dd_HHmmss")
     $newName = "$timestamp" + "_" + $_.Name
     $_ | Add-Member -NotePropertyName 'Name' -NotePropertyValue $newName -Force
+    Write-Host "Renaming file for download: $($_.Name) -> $newName" -ForegroundColor DarkYellow
     return $_
   }
 
-  foreach ($f in $targetFiles) {
+  Write-Host "Found $($new_targetFiles.Count) files in $FolderServerRelative" -ForegroundColor Green
+
+  foreach ($f in $newtargetFiles) {
     $serverRel = if ($f.ServerRelativeUrl) { $f.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $f.Name) }
     Download-File -ServerRelativeUrl $serverRel -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
   }

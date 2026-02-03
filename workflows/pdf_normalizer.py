@@ -94,7 +94,7 @@ def main() -> None:
         logger.error(str(e))
         raise SystemExit(1)
 
-    pdf_files = sorted(args.input_dir.glob("*.pdf"))
+    pdf_files = sorted(args.input_dir.glob("*.pdf")) + sorted(args.input_dir.glob("*.PDF"))
     if not pdf_files:
         logger.info("No PDF files found in input directory: %s", args.input_dir)
         return

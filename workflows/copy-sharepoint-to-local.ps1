@@ -270,7 +270,7 @@ function Copy-SharePointFolder {
 
   $targetFiles = $files | Where-Object { Should-IncludeFile -FileName $_.Name -AllowedExtensions $AllowedExtensions }
 
-$new_targetFiles = foreach ($f in $targetFiles) {
+  foreach ($f in $targetFiles) {
 
     # --- Get a usable file name (SP objects vary)
     $name =
@@ -281,7 +281,7 @@ $new_targetFiles = foreach ($f in $targetFiles) {
         else { $null }
 
     if ([string]::IsNullOrWhiteSpace($name)) {
-        Write-Warning "Skipping item (no filename). Type=$($f.GetType().FullName)"
+        Write-Warning “Skipping item (no filename). Type=$($f.GetType().FullName)”
         continue
     }
 
@@ -291,11 +291,11 @@ $new_targetFiles = foreach ($f in $targetFiles) {
         else { (Join-Url -a $FolderServerRelative -b $name) }
 
     if ([string]::IsNullOrWhiteSpace($serverRel)) {
-        Write-Warning "Skipping '$name' (ServerRelativeUrl is null)"
+        Write-Warning “Skipping '$name' (ServerRelativeUrl is null)”
         continue
     }
 
-    # --- Timestamp (prefer SP modified date if present, else now)
+    # --- Timestamp prefix for local filename (prefer SP modified date)
     $dt =
         if ($f.TimeLastModified) { $f.TimeLastModified }
         elseif ($f.Modified) { $f.Modified }
@@ -304,25 +304,15 @@ $new_targetFiles = foreach ($f in $targetFiles) {
 
     try { $dt = [datetime]$dt } catch { $dt = Get-Date }
     $ts = $dt.ToString('yyyy_MM_dd_HHmmss')
+    $localName = “${ts}_$name”
 
-    $newName = "${ts}_$name"
-
-    # --- Rename in SharePoint (same folder)
-    # no confirmation
-
-    Rename-PnPFile -ServerRelativeUrl $serverRel -TargetFileName $newName -OverwriteIfAlreadyExists -Force
-
-    # --- Return a “renamed file” object for your next loop
-    [pscustomobject]@{
-        Name              = $newName
-        ServerRelativeUrl = (Join-Url -a (Split-Path $serverRel -Parent).Replace('\','/') -b $newName)
+    # --- Download directly from SP (no rename on SP side) then move to Fertig
+    try {
+      Download-File -ServerRelativeUrl $serverRel -LibraryName $LibraryName -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $localName -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
+    } catch {
+      Write-Warning “Failed to process '$name': $_”
     }
-}
-
-# Now use the renamed files
-foreach ($f in $new_targetFiles) {
-    Download-File -ServerRelativeUrl $f.ServerRelativeUrl -LibraryName $LibraryName -SourceFolder $SourceFolder -TargetDirectory $LocalPath -TargetFileName $f.Name -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -ParentFolderServerRelative $FolderServerRelative -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
-}
+  }
 
   if ($Recursive) {
     $subFolders = Get-PnPFolderItem -FolderSiteRelativeUrl $siteRelative -ItemType Folder | Where-Object { $_.Name -ne 'Forms' }
@@ -330,7 +320,7 @@ foreach ($f in $new_targetFiles) {
       $subServerRel = if ($sf.ServerRelativeUrl) { $sf.ServerRelativeUrl } else { (Join-Url -a $FolderServerRelative -b $sf.Name) }
       $localSub = Join-Path -Path $LocalPath -ChildPath $sf.Name
       Ensure-Directory -Path $localSub
-      Copy-SharePointFolder -FolderServerRelative $subServerRel -SourceFolder -LocalPath $localSub -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $AllowedExtensions -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
+      Copy-SharePointFolder -FolderServerRelative $subServerRel -LibraryName $LibraryName -SourceFolder $SourceFolder -LocalPath $localSub -Recursive:$Recursive -Overwrite:$Overwrite -ModifiedSince:$ModifiedSince -AllowedExtensions $AllowedExtensions -SiteServerRelative $SiteServerRelative -MoveToFertig:$MoveToFertig
     }
   }
 }

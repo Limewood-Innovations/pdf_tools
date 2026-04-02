@@ -2,13 +2,17 @@
 
 All notable changes to this project are documented here.
 
-## 2026-02-15
+## 2026-04-02
+
+### Fixed
+- `workflows/copy-sharepoint-to-local.ps1`: stop renaming files on SharePoint before download. Previous behavior caused cascading timestamp stacking when downloads failed, making files unrecoverable without manual cleanup. Timestamps are now only applied to local filenames.
+- `workflows/copy-sharepoint-to-local.ps1`: add per-file error handling so one failed download no longer aborts the entire batch.
+- `workflows/copy-sharepoint-to-local.ps1`: fix missing `-LibraryName` and `-SourceFolder` parameters in recursive folder calls.
 
 ### Changed
-- `workflows/pdf_normalizer.py` now supports `--pdfa-level` and defaults to `3a` when `--pdfa` is enabled.
 - `tools/convert_to_pdfa.py` now accepts explicit PDF/A levels (`1b`, `2b`, `2u`, `3b`, `3u`, `3a`) and defaults to `3a`.
+- `workflows/pdf_normalizer.py` now supports `--pdfa-level` and defaults to `3a` when `--pdfa` is enabled.
 - PDF/A conversion uses the discovered Ghostscript executable from the normalizer workflow.
-- Updated `workflows/PDF_NORMALIZATION.md` to document PDF/A level selection and PDF/A-3A default behavior.
 
 ## 2025-09-16
 

@@ -5,6 +5,9 @@ All notable changes to this project are documented here.
 ## 2026-04-02
 
 ### Fixed
+- `tools/normalize.py`: pre-repair PDFs via pikepdf before Ghostscript normalization. List & Label generated PDFs with broken object references caused GS to hang indefinitely or produce ~6KB stub files. pikepdf rewrites the PDF structure, fixing the references before GS processes them.
+- `tools/normalize.py`: escape `%` characters in output filenames. Ghostscript interprets `%` in `-sOutputFile` as printf format specifiers, causing failures for files like `...17,81%_mit Anlagen.pdf`.
+- `tools/normalize.py`: add missing `timeout=300` for Ghostscript subprocess (was documented in March incident but absent from code). Add output size validation to detect and reject stub files.
 - `workflows/copy-sharepoint-to-local.ps1`: stop renaming files on SharePoint before download. Previous behavior caused cascading timestamp stacking when downloads failed, making files unrecoverable without manual cleanup. Timestamps are now only applied to local filenames.
 - `workflows/copy-sharepoint-to-local.ps1`: add per-file error handling so one failed download no longer aborts the entire batch.
 - `workflows/copy-sharepoint-to-local.ps1`: fix missing `-LibraryName` and `-SourceFolder` parameters in recursive folder calls.

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-15
+
+### Changed
+- `workflows/pdf_normalizer.py` now supports `--pdfa-level` and defaults to `3a` when `--pdfa` is enabled.
+- `tools/convert_to_pdfa.py` now accepts explicit PDF/A levels (`1b`, `2b`, `2u`, `3b`, `3u`, `3a`) and defaults to `3a`.
+- PDF/A conversion uses the discovered Ghostscript executable from the normalizer workflow.
+- Updated `workflows/PDF_NORMALIZATION.md` to document PDF/A level selection and PDF/A-3A default behavior.
+
 ## 2025-09-16
 
 ### Added

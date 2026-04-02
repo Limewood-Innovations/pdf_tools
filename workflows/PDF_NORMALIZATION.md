@@ -79,7 +79,8 @@ python workflows/pdf_normalizer_new.py \
 | `--log-file` | _(console)_ | Path to log file |
 | `--log-max-bytes` | `5242880` | Max log file size (5 MB) |
 | `--log-backup-count` | `5` | Number of rotated logs to keep |
-| `--pdfa` | `false` | If set, convert normalized PDFs to PDF/A‑1b after processing |
+| `--pdfa` | `false` | If set, convert normalized PDFs to PDF/A after processing |
+| `--pdfa-level` | `3a` | PDF/A level requested when `--pdfa` is used (`1b`, `2b`, `2u`, `3b`, `3u`, `3a`) |
 
 
 ## Ghostscript Quality Profiles
@@ -128,12 +129,12 @@ For each PDF in input directory:
    ```
 3. **Validate Output** - Check for successful generation
 4. **Archive Original** - Move original to archive directory (if specified)
-5. **Convert to PDF/A** - Optionally convert the normalized PDF to PDF/A-1b using `convert_to_pdfa` tool.
+5. **Convert to PDF/A** - Optionally convert the normalized PDF to PDF/A using `convert_to_pdfa` tool.
    ```bash
    python tools/convert_to_pdfa.py \
-       --input-pdf output.pdf \
-       --output-pdf output_pdfa.pdf \
-       --pdfa-level 1b
+       output.pdf \
+       output_pdfa.pdf \
+       --pdfa-level 3a
    ```
 6. **Log Results** - Record processing status
 

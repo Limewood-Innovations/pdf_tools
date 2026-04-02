@@ -64,7 +64,13 @@ def main() -> None:
     parser.add_argument(
         "--pdfa",
         action="store_true",
-        help="If set, convert the normalized PDF to PDF/A-1b after processing.",
+        help="If set, convert the normalized PDF to PDF/A after processing.",
+    )
+    parser.add_argument(
+        "--pdfa-level",
+        choices=["1b", "2b", "2u", "3b", "3u", "3a"],
+        default="3a",
+        help="PDF/A conformance level to request when --pdfa is set (default: 3a).",
     )
     parser.add_argument(
         "--log-backup-count",
@@ -119,7 +125,12 @@ def main() -> None:
             )
             # Optionally convert to PDF/A
             if args.pdfa:
-                pdfa_path = convert_to_pdfa(output_pdf, output_pdf.with_suffix('.pdfa.pdf'))
+                pdfa_path = convert_to_pdfa(
+                    output_pdf,
+                    output_pdf.with_suffix(".pdfa.pdf"),
+                    pdfa_level=args.pdfa_level,
+                    gs_executable=gs_bin,
+                )
                 logger.info("Converted to PDF/A: %s", pdfa_path)
 
 

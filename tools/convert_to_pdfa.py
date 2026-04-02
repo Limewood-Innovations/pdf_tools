@@ -1,24 +1,9 @@
 """tools/convert_to_pdfa.py
 
-Utility to convert a PDF file to PDF/A‑1b compliance using Ghostscript.
+Utility to convert a PDF file to PDF/A using Ghostscript.
 
-Ghostscript must be installed and available on the system PATH (or provide the full path
-via the `gs_executable` argument). The function runs the following command:
-
-    gs -dPDFA -dBATCH -dNOPAUSE -dNOOUTERSAVE -sProcessColorModel=DeviceRGB \
-       -sDEVICE=pdfwrite -sOutputFile=<output> <input>
-
-The command produces a PDF/A‑1b file suitable for archiving and long‑term preservation.
-
-Typical usage:
-
-```python
-from tools.convert_to_pdfa import convert_to_pdfa
-
-convert_to_pdfa('input.pdf', 'output_pdfa.pdf')
-```
-
-If Ghostscript is not found, a `FileNotFoundError` is raised.
+Ghostscript must be installed and available on the system PATH (or provide
+the full path via the ``gs_executable`` argument).
 """
 
 import subprocess
@@ -26,14 +11,26 @@ import shutil
 from pathlib import Path
 from typing import Union
 
+
+SUPPORTED_PDFA_LEVELS = {
+    "1b": 1,
+    "2b": 2,
+    "2u": 2,
+    "3b": 3,
+    "3u": 3,
+    "3a": 3,
+}
+
+
 def convert_to_pdfa(
     input_pdf: Union[str, Path],
     output_pdf: Union[str, Path],
     *,
+    pdfa_level: str = "3a",
     gs_executable: str = "gs",
     timeout: int = 60,
 ) -> Path:
-    """Convert *input_pdf* to PDF/A‑1b and write to *output_pdf*.
+    """Convert *input_pdf* to PDF/A and write to *output_pdf*.
 
     Parameters
     ----------
@@ -41,6 +38,10 @@ def convert_to_pdfa(
         Path to the source PDF file.
     output_pdf: str or Path
         Destination path for the PDF/A file. Parent directories are created if needed.
+    pdfa_level: str, optional
+        PDF/A conformance target. Supported values:
+        ``1b``, ``2b``, ``2u``, ``3b``, ``3u``, ``3a``.
+        Defaults to ``3a``.
     gs_executable: str, optional
         Name or full path of the Ghostscript executable. Defaults to ``"gs"`` which
         relies on the executable being in the system ``PATH``.
@@ -56,11 +57,20 @@ def convert_to_pdfa(
     ------
     FileNotFoundError
         If the Ghostscript executable cannot be located.
+    ValueError
+        If ``pdfa_level`` is not supported.
     subprocess.CalledProcessError
-        If Ghostscript returns a non‑zero exit status.
+        If Ghostscript returns a non-zero exit status.
     """
     input_path = Path(input_pdf).expanduser().resolve()
     output_path = Path(output_pdf).expanduser().resolve()
+    normalized_level = pdfa_level.lower().strip()
+    pdfa_version = SUPPORTED_PDFA_LEVELS.get(normalized_level)
+    if pdfa_version is None:
+        allowed_levels = ", ".join(sorted(SUPPORTED_PDFA_LEVELS))
+        raise ValueError(
+            f"Unsupported PDF/A level '{pdfa_level}'. Use one of: {allowed_levels}"
+        )
 
     # Ensure input exists
     if not input_path.is_file():
@@ -75,14 +85,20 @@ def convert_to_pdfa(
     # Create parent directories for output if they don't exist
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Ghostscript command for PDF/A‑1b conversion
+    # Ghostscript command for PDF/A conversion.
+    # Note: PDF/A-3A requires accessible/structured source content. If the source
+    # document is not tagged, Ghostscript may fail or produce a lower conformance.
     cmd = [
         gs_executable,
-        "-dPDFA",
+        f"-dPDFA={pdfa_version}",
         "-dBATCH",
         "-dNOPAUSE",
         "-dNOOUTERSAVE",
+        "-dSAFER",
+        "-dPDFACompatibilityPolicy=1",
         "-sProcessColorModel=DeviceRGB",
+        "-sColorConversionStrategy=RGB",
+        "-dEmbedAllFonts=true",
         "-sDEVICE=pdfwrite",
         f"-sOutputFile={output_path}",
         str(input_path),
@@ -101,6 +117,12 @@ if __name__ == "__main__":
     parser.add_argument("input", help="Path to input PDF")
     parser.add_argument("output", help="Path to output PDF/A file")
     parser.add_argument(
+        "--pdfa-level",
+        default="3a",
+        choices=sorted(SUPPORTED_PDFA_LEVELS),
+        help="PDF/A level to generate (default: 3a)",
+    )
+    parser.add_argument(
         "--gs",
         dest="gs_executable",
         default="gs",
@@ -109,7 +131,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        result = convert_to_pdfa(args.input, args.output, gs_executable=args.gs_executable)
+        result = convert_to_pdfa(
+            args.input,
+            args.output,
+            pdfa_level=args.pdfa_level,
+            gs_executable=args.gs_executable,
+        )
         print(f"PDF/A created at: {result}")
     except Exception as e:
         print(f"Error: {e}")

@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 2026-04-17
+
+### Added
+- `deploy/95-arial-liberation.conf`: Ghostscript cidfmap drop-in mapping `ArialMT`, `TimesNewRomanPSMT`, `Calibri` (and PostScript-name variants) to local TrueType files. Without it Ghostscript silently substitutes embedded Arial subset fonts with `DroidSansFallback`, dropping lowercase `h`/`i` glyphs and corrupting Sonderzeichen in normalized output (incident `2026_04_17_pdf_error/`).
+- `deploy/install_server_fonts.sh`: idempotent provisioning script — installs `fonts-liberation`, `ttf-mscorefonts-installer`, `fonts-crosextra-carlito`, drops the cidfmap into `/etc/ghostscript/cidfmap.d/`, and runs `update-gsfontmap`. Calibri uses Carlito (metric-compat OSS clone) which renders Western glyphs but may shift Sonderzeichen — real Calibri must be supplied separately if exact fidelity is required.
+
 ## 2026-04-02
 
 ### Fixed

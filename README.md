@@ -47,6 +47,16 @@ python .\pdf_batch_tools.py --in-dir .\01_input --out-dir-split .\02_processed -
 python  pdf_batch_tools.py --in-dir ./01_input --out-dir-split ./02_processed --out-dir-clean ./03_cleaned --debug-pages --min-alnum-ratio 0.2 --no-image-nonblank --min-bytes 6000 --log-file ./logs/pdf.log
 ```
 
+## Server-Setup (Linux, einmalig)
+
+Damit die Ghostscript-Normalisierung (`pdf_normalizer.py`) eingebettete Arial/Times/Calibri-Fonts korrekt rendert, muss der Server passende TrueType-Fonts und ein cidfmap-Drop-In installiert haben. Sonst substituiert Ghostscript still mit `DroidSansFallback` und Buchstaben/Sonderzeichen verschwinden im Output.
+
+```bash
+sudo bash deploy/install_server_fonts.sh
+```
+
+Installiert `fonts-liberation`, `ttf-mscorefonts-installer`, `fonts-crosextra-carlito` und legt `/etc/ghostscript/cidfmap.d/95-arial-liberation.conf` an. Idempotent.
+
 ## Aufgabenplaner (Task Scheduler)
 - Aktion: `C:\pdf-tools\run_split.bat`
 - "Starten in": `C:\pdf-tools`
